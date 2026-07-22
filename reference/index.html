@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Jaffna Peninsula Groundwater System — Interactive Exhibition</title>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="css/styles.css"/>
+</head>
+<body>
+
+
+<!-- ══════ INTRO ══════════════════════════════════ -->
+<div id="intro">
+  <div class="rings">
+    <div class="ring"></div><div class="ring"></div>
+    <div class="ring"></div><div class="ring"></div>
+  </div>
+
+  <!-- TOP: eyebrow + title -->
+  <div class="intro-top">
+    <div class="eyebrow">Sri Lanka Hydrogeology · Interactive Exhibition</div>
+    <h1 class="intro-title">Jaffna Peninsula Groundwater System</h1>
+  </div>
+
+<div class="intro-middle">
+  <div id="introImageWrap">
+    <img src="assets/images/jaffna-map.png" alt="Jaffna Peninsula Map" id="jaffnaImage">
+  </div>
+</div>
+
+  <!-- BOTTOM: sub text, pills, button -->
+  <div class="intro-bottom">
+    <button id="startBtn" onclick="enterApp()">Enter Visualizer</button>
+    <div id="pbar">
+      <p id="ptext">Click to begin</p>
+      <div class="bar"><div class="bar-fill" id="bfill"></div></div>
+    </div>
+  </div>
+</div>
+
+<div id="globalLogo">
+  <img src="assets/images/iwmi-logo.jpg" alt="Project Logo">
+</div>
+
+
+<!-- <div id="camera-inspector">
+  <div>POS: <span id="cam-pos" class="inspector-value">0, 0, 0</span></div>
+  <div>ROT: <span id="cam-rot" class="inspector-value">0, 0, 0</span></div>
+  <div style="font-size: 0.5rem; opacity: 0.7; margin-top: 5px;">Move camera to update...</div>
+</div> -->
+
+<!-- ══════ APP ════════════════════════════════════ -->
+<div id="app">
+
+  
+  <div id="cvs-wrap"></div>
+
+  <!-- Rain particles canvas -->
+  <canvas id="rainCanvas"></canvas>
+  <!-- Lightning flash overlay -->
+  <div id="lightning"></div>
+
+  <!-- Water level rising / falling arrows -->
+  <div id="waterLevelArrows" aria-hidden="true">
+    <div class="wla-group left" id="wlaLeft">
+      <div class="wla-stack">
+        <span class="wla-arrow"></span>
+        <span class="wla-arrow"></span>
+        <span class="wla-arrow"></span>
+      </div>
+    </div>
+    <div class="wla-group center">
+      <div class="wla-stack">
+        <span class="wla-arrow"></span>
+        <span class="wla-arrow"></span>
+        <span class="wla-arrow"></span>
+      </div>
+      <div class="wla-label" id="wlaLabel">FRESHWATER RISING</div>
+    </div>
+  </div>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div class="spin"></div>
+    <div class="load-label" id="ltext">INITIALISING SYSTEMS</div>
+    <div class="load-bar-wrap"><div class="load-bar-inner" id="lbar"></div></div>
+    <div class="load-detail" id="ldetail">Preparing renderer…</div>
+  </div>
+
+  <!-- Top bar -->
+  <div id="topbar">
+    <div class="logo" onclick="goHome()" role="button" tabindex="0" title="Home" aria-label="Return to home screen" onkeydown="if(event.key==='Enter'||event.key===' ')goHome()">
+      <div class="logo-mark">JW</div>
+      <div>
+        <div class="logo-name">Jaffna <span>Aquifer</span></div>
+        <div class="logo-sub">Northern Sri Lanka · Hydrogeology</div>
+      </div>
+    </div>
+  <div class="nav-tabs">
+    <div class="tab active" onclick="setStage(1)">01 · Ocean View</div>
+    <div class="tab"        onclick="setStage(2)">02 · Climate Control</div>
+    <div class="tab"        onclick="setStage(3)">03 · Pumping Stations</div>
+    <div class="tab"        onclick="setStage(4)">04 · Infrastructure</div>
+  </div>
+  <div class="topbar-right">
+    <button type="button" id="btnModelSettings" onclick="toggleModelSettings()">Model Settings</button>
+  </div>
+  </div>
+
+  <!-- Model Settings panel (sea.html-style controls + 4 presets) -->
+  <div id="modelSettingsPanel">
+    <div class="ms-head">
+      <h3>Model Settings</h3>
+      <div class="ms-head-actions">
+        <button type="button" id="msReset" onclick="resetModelSettings()">Reset</button>
+        <button type="button" id="msClose" onclick="toggleModelSettings(false)">Close</button>
+      </div>
+    </div>
+
+    <div class="ms-group">
+      <h4>Saved Presets</h4>
+      <div class="ms-presets" id="msPresets"></div>
+    </div>
+
+    <div class="ms-group">
+      <h4>Global Water &amp; Dynamic Controls</h4>
+      <div class="ms-row">
+        <label>Wave Height:</label>
+        <input type="range" id="ms-wave-height" min="0" max="0.5" step="0.01" value="0.14">
+        <span id="ms-wave-height-val">0.14</span>
+      </div>
+      <div class="ms-row">
+        <label>Size/Freq:</label>
+        <input type="range" id="ms-wave-freq" min="0.5" max="10.0" step="0.1" value="2.8">
+        <span id="ms-wave-freq-val">2.8</span>
+      </div>
+      <div class="ms-row">
+        <label>Wave/Rain Speed:</label>
+        <input type="range" id="ms-wave-speed" min="0" max="5.0" step="0.1" value="2.0">
+        <span id="ms-wave-speed-val">2.0</span>
+      </div>
+    </div>
+
+    <div class="ms-group">
+      <h4>Rain Dynamics &amp; Wind</h4>
+      <div class="ms-row">
+        <label>Rain Amount:</label>
+        <input type="range" id="ms-rain-count" min="0" max="1500" step="10" value="600">
+        <span id="ms-rain-count-val">600</span>
+      </div>
+      <div class="ms-row">
+        <label>Rain Length:</label>
+        <input type="range" id="ms-rain-length" min="0.1" max="1.5" step="0.05" value="0.40">
+        <span id="ms-rain-length-val">0.40</span>
+      </div>
+      <div class="ms-row">
+        <label>Wind Velocity X:</label>
+        <input type="range" id="ms-wind-x" min="-5.0" max="5.0" step="0.1" value="1.5">
+        <span id="ms-wind-x-val">1.5</span>
+      </div>
+      <div class="ms-row">
+        <label>Wind Velocity Z:</label>
+        <input type="range" id="ms-wind-z" min="-5.0" max="5.0" step="0.1" value="0.0">
+        <span id="ms-wind-z-val">0.0</span>
+      </div>
+      <div class="ms-row">
+        <label>Rain Top:</label>
+        <input type="range" id="ms-rain-top" min="1.0" max="12.0" step="0.2" value="3.2">
+        <span id="ms-rain-top-val">3.2</span>
+      </div>
+      <div class="ms-row">
+        <label>Rain Bottom:</label>
+        <input type="range" id="ms-rain-bottom" min="-2.0" max="5.0" step="0.1" value="-1.0">
+        <span id="ms-rain-bottom-val">-1.0</span>
+      </div>
+    </div>
+
+    <div class="ms-group">
+      <h4>Shape Key &amp; Cloud Modifiers</h4>
+      <div class="ms-row">
+        <label>Key 4:</label>
+        <input type="range" id="ms-shape-key-4" min="0" max="1" step="0.01" value="0">
+        <span id="ms-shape-key-4-val">0.00</span>
+      </div>
+      <div class="ms-row">
+        <label>Key 5:</label>
+        <input type="range" id="ms-shape-key-5" min="0" max="1" step="0.01" value="0">
+        <span id="ms-shape-key-5-val">0.00</span>
+      </div>
+      <div class="ms-row">
+        <label>Dry Season:</label>
+        <input type="range" id="ms-shape-key-dry" min="0" max="1" step="0.01" value="1">
+        <span id="ms-shape-key-dry-val">1.00</span>
+      </div>
+      <div class="ms-row">
+        <label>Cloud Opacity:</label>
+        <input type="range" id="ms-cloud-opacity" min="0" max="1" step="0.01" value="0">
+        <span id="ms-cloud-opacity-val">0.00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LEFT PANEL ── -->
+  <div id="leftPanel">
+    <!-- Ground Stratigraphy — shared across all tabs -->
+    <div class="card">
+      <div class="card-title">Ground Stratigraphy</div>
+      <div class="card-body" style="margin-bottom:1rem">
+        Geological layers of the Jaffna Peninsula subsurface.
+      </div>
+
+      <table class="legend-table">
+        <tr>
+          <td class="td-thumb">
+            <img src="assets/images/top-soil.png" alt="Soil" class="layer-img">
+          </td>
+          <td class="td-info">
+            <div class="layer-name">Top Soil & Red Earth</div>
+            <div class="layer-desc">Surface quaternary deposits</div>
+          </td>
+        </tr>
+
+        <tr>
+          <td class="td-thumb">
+            <img src="assets/images/layer-2.png" alt="Limestone" class="layer-img">
+          </td>
+          <td class="td-info">
+            <div class="layer-name">Miocene Limestone</div>
+            <div class="layer-desc">Primary aquifer formation</div>
+          </td>
+        </tr>
+
+        <tr>
+          <td class="td-thumb">
+            <img src="assets/images/layer-3.png" alt="Freshwater" class="layer-img">
+          </td>
+          <td class="td-info">
+            <div class="layer-name">Freshwater Lens</div>
+            <div class="layer-desc">Ghyben-Herzberg equilibrium</div>
+          </td>
+        </tr>
+
+        <tr>
+          <td class="td-thumb">
+            <img src="assets/images/layer-5.png" alt="Marine" class="layer-img">
+          </td>
+          <td class="td-info">
+            <div class="layer-name">saltwater</div>
+            <div class="layer-desc">Impermeable base layer</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="td-thumb">
+            <img src="assets/images/layer-4.png" alt="Marine" class="layer-img">
+          </td>
+          <td class="td-info">
+            <div class="layer-name">freshwater</div>
+            <div class="layer-desc">Impermeable base layer</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Stage placeholders (kept for panel toggle logic) -->
+    <div id="lp-s1" class="hidden"></div>
+    <div id="lp-s2" class="hidden"></div>
+    <div id="lp-s3" class="hidden">
+      <!-- Block info — shows below Ground Stratigraphy on infrastructure click -->
+      <div id="blockInfoCard">
+        <div class="bi-eyebrow">Structure Inspection</div>
+        <div class="bi-name" id="biName">—</div>
+        <div class="bi-desc" id="biDesc"></div>
+        <div id="biTags"></div>
+      </div>
+    </div>
+    <div id="lp-s4" class="hidden"></div>
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div id="rightPanel">
+    <!-- Stage 1 -->
+    <div id="rp-s1">
+      <div class="card">
+        <div class="card-title">Water Scarcity Status</div>
+        <div class="gauge-bar-wrap">
+          <div class="gauge-bar-label"><span>Per Capita Water</span><em>718 m³/yr</em></div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-danger" style="width:42%"></div></div>
+        </div>
+        <div class="gauge-bar-wrap">
+          <div class="gauge-bar-label"><span>Stress Threshold</span><em>1,700 m³/yr</em></div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-warn" style="width:100%"></div></div>
+        </div>
+        <div class="alert-banner show">
+          <div class="alert-ico">⚠️</div>
+          <div class="alert-msg">
+            <strong>WATER SCARCITY</strong>
+            <span>Below Falkenmark 1000 m³/capita</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-title">Aquifer Geology</div>
+        <div class="card-body">
+          Jaffna Limestone (90 m) overlies Mannar Sandstone (130 m) and
+          Pre-Paleozoic basement at <strong>240 m</strong>. Fractured limestone
+          enables rapid groundwater movement — and rapid saline contamination.
+        </div>
+      </div>
+    </div>
+    <!-- Stage 2 -->
+    <div id="rp-s2" class="hidden">
+      <div class="card">
+        <div class="card-title">Live Pump Output</div>
+        <div class="pump-val-row">
+          <span class="pump-label">STATION 1</span>
+          <span><span class="pump-num" id="pval1">0</span><span class="stat-unit"> %</span></span>
+        </div>
+        <div class="gauge-bar-wrap" style="margin-top:.15rem">
+          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-safe" id="pbar1" style="width:0%"></div></div>
+        </div>
+        <div class="pump-val-row" style="margin-top:.35rem">
+          <span class="pump-label">STATION 2</span>
+          <span><span class="pump-num" id="pval2">0</span><span class="stat-unit"> %</span></span>
+        </div>
+        <div class="gauge-bar-wrap" style="margin-top:.15rem">
+          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-safe" id="pbar2" style="width:0%"></div></div>
+        </div>
+        <div style="margin-top:.5rem">
+          <div class="gauge-bar-label"><span>Combined Load</span><em id="loadPct">0%</em></div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-safe" id="loadBar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Intrusion Alert</div>
+        <div class="card-body" style="margin-bottom:.45rem">
+          Combined extraction above <strong>60%</strong> risks Ghyben–Herzberg collapse
+          and saline infiltration through limestone fissures.
+        </div>
+        <div class="alert-banner" id="intrusionAlert">
+          <div class="alert-ico">🚨</div>
+          <div class="alert-msg">
+            <strong>SALINE INTRUSION RISK</strong>
+            <span>Reduce pump rate immediately</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Extraction History</div>
+        <div class="stat-row">
+          <span class="stat-label">1981 Total (estimate)</span>
+          <span><span class="stat-val">290M</span><span class="stat-unit">m³/yr</span></span>
+        </div>
+        <div class="stat-row warn">
+          <span class="stat-label">Current Domestic Need</span>
+          <span><span class="stat-val">11.5M</span><span class="stat-unit">m³/yr</span></span>
+        </div>
+      </div>
+    </div>
+    <!-- Stage 3 -->
+    <div id="rp-s3" class="hidden">
+      <div class="card">
+        <div class="card-title">Water Quality Threats</div>
+        <div class="gauge-bar-wrap">
+          <div class="gauge-bar-label"><span>Nitrate (Valikamam)</span><em>ELEVATED</em></div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-danger" style="width:82%"></div></div>
+        </div>
+        <div class="gauge-bar-wrap">
+          <div class="gauge-bar-label"><span>Faecal Contamination</span><em>HIGH</em></div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-danger" style="width:74%"></div></div>
+        </div>
+        <div class="gauge-bar-wrap">
+          <div class="gauge-bar-label"><span>Salinity TDS</span><em>MODERATE</em></div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-warn" style="width:55%"></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Pollution Sources</div>
+        <div class="leg-item"><div class="swatch" style="background:#d97706"></div>Agrochemical Runoff</div>
+        <div class="leg-item"><div class="swatch" style="background:#dc2626"></div>Industrial Waste Oil</div>
+        <div class="leg-item"><div class="swatch" style="background:#7c3aed"></div>Sanitation Failure</div>
+        <div class="leg-item"><div class="swatch" style="background:rgba(26,127,193,.7)"></div>Saline Intrusion</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Research Findings</div>
+        <div class="quote-block">
+          "The carrying capacity of the limestone aquifer shall play a major role —
+          caverns may weaken in strength and fractures cause water to flow to sea."
+          <br/><br/>— Vijakanth et al., IJSER 2017
+        </div>
+      </div>
+    </div>
+    <!-- Stage 4 -->
+    <div id="rp-s4" class="hidden">
+      </div>
+    </div>
+  </div>
+
+  <!-- Exit isolate button -->
+  <button id="btnExit">← EXIT PREVIEW</button>
+
+  <!-- Bottom control panel -->
+  <div id="uiPanel">
+    <!-- Stage 1: weather toggle switch -->
+    <div id="cs1" class="ctrl-group">
+      <div class="ctrl-label">Atmosphere</div>
+      <div class="weather-toggle-wrap">
+        <button class="toggle-track" id="toggleTrack" onclick="toggleWeather()" aria-label="Toggle season">
+          <div class="toggle-thumb" id="toggleThumb">☀</div>
+        </button>
+        <span class="toggle-season-label" id="seasonLabel">DRY SEASON</span>
+      </div>
+    </div>
+    <!-- Stage 4: ocean toggle -->
+    <div id="cs4" class="hidden ctrl-group">
+      <div class="ctrl-label">Ocean Water</div>
+      <div class="ocean-toggle-wrap">
+        <button class="ocean-track" id="oceanTrack" onclick="toggleOcean()" aria-label="Toggle ocean">
+          <div class="ocean-thumb" id="oceanThumb">🌊</div>
+        </button>
+        <span class="ocean-label" id="oceanLabel">OCEAN ON</span>
+      </div>
+    </div>
+    <!-- Stage 2: pump sliders -->
+    <div id="cs2" class="hidden" style="display:flex;gap:1.4rem">
+      <div class="ctrl-group">
+        <div class="ctrl-label">Pump Station 1</div>
+        <input type="range" id="dialP2" min="0" max="1" step="0.01" value="0">
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Pump Station 2</div>
+        <input type="range" id="dialP1" min="0" max="1" step="0.01" value="0">
+      </div>
+      
+    </div>
+    <!-- Stage 3: hint -->
+    <div id="cs3" class="hidden ctrl-group">
+      <div class="s3-hint">CLICK HIGHLIGHTED BLOCKS TO INSPECT</div>
+    </div>
+  </div>
+
+  <!-- Context bar -->
+  <div id="contextBar">ORBIT · SCROLL TO ZOOM · DRAG TO ROTATE</div>
+
+</div><!-- /app -->
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
