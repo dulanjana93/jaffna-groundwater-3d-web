@@ -439,11 +439,7 @@ if (activePresetSlot >= 0 && presetSlots[activePresetSlot]) {
   modelSettings = { ...DEFAULT_MODEL_SETTINGS, ...presetSlots[activePresetSlot].settings };
 }
 
-// ── RAIN SYSTEM (2D canvas — climate tab quick weather) ────────────────
-const rainCvs = document.getElementById('rainCanvas');
-const rainCtx = rainCvs.getContext('2d');
-let rainDrops = [];
-let rainAF = null;
+// ── LIGHTNING / THUNDER (climate tab — 3D rain comes from cloud rainLines) ─
 let thunderTimeout = null;
 
 function createTextPlane(text) {
@@ -484,53 +480,15 @@ function createTextPlane(text) {
   return mesh;
 }
 
-function initRain() {
-  rainCvs.width  = window.innerWidth;
-  rainCvs.height = window.innerHeight;
-  rainDrops = [];
-  const count = Math.floor(window.innerWidth * 0.18);
-  for (let i = 0; i < count; i++) {
-    rainDrops.push({
-      x:  Math.random() * rainCvs.width,
-      y:  Math.random() * rainCvs.height,
-      len:  12 + Math.random() * 18,
-      speed: 14 + Math.random() * 10,
-      opacity: 0.3 + Math.random() * 0.45,
-    });
-  }
-}
-
-function drawRain() {
-  rainCtx.clearRect(0, 0, rainCvs.width, rainCvs.height);
-  rainDrops.forEach(d => {
-    rainCtx.beginPath();
-    rainCtx.moveTo(d.x, d.y);
-    rainCtx.lineTo(d.x - 2, d.y + d.len);
-    rainCtx.strokeStyle = `rgba(180,215,240,${d.opacity})`;
-    rainCtx.lineWidth = 1;
-    rainCtx.stroke();
-    d.y += d.speed;
-    if (d.y > rainCvs.height) {
-      d.y = -d.len;
-      d.x = Math.random() * rainCvs.width;
-    }
-  });
-  rainAF = requestAnimationFrame(drawRain);
-}
-
-function startRain() {
-  initRain();
-  document.getElementById('rainCanvas').style.opacity = '1';
-  if (rainAF) cancelAnimationFrame(rainAF);
-  drawRain();
+function startThunder() {
+  if (thunderTimeout) clearTimeout(thunderTimeout);
   scheduleThunder();
 }
 
-function stopRain() {
-  document.getElementById('rainCanvas').style.opacity = '0';
-  if (rainAF) { cancelAnimationFrame(rainAF); rainAF = null; }
+function stopThunder() {
   if (thunderTimeout) { clearTimeout(thunderTimeout); thunderTimeout = null; }
-  rainCtx.clearRect(0, 0, rainCvs.width, rainCvs.height);
+  const flash = document.getElementById('lightning');
+  if (flash) flash.style.background = 'rgba(210,235,255,0)';
 }
 
 function scheduleThunder() {
@@ -568,10 +526,6 @@ function doLightning() {
     src.start();
   } catch(e) { /* audio not available */ }
 }
-
-window.addEventListener('resize', () => {
-  if (isRainy) { stopRain(); startRain(); }
-});
 
 // ── WEATHER TOGGLE (global, called from HTML) ──────────────────────────
 const drySeasonAnim = { value: 1 };
@@ -630,11 +584,12 @@ window.toggleWeather = function() {
     track.classList.add('rainy');
     thumb.textContent = '🌧';
     label.textContent = 'RAINY SEASON';
-    startRain();
+    createRainEngine();
     if (rainLines) {
       rainLines.visible = modelSettings.rainCount > 0;
       rainLines.geometry.setDrawRange(0, modelSettings.rainCount * 2);
     }
+    startThunder();
     modelSettings.cloudOpacity = Math.max(modelSettings.cloudOpacity, 0.6);
     gsap.to(scene.background, { r:0.04, g:0.08, b:0.14, duration:1.8 });
     if (scene.fog) { gsap.to(scene.fog.color, { r:0.04, g:0.08, b:0.14, duration:1.8 }); gsap.to(scene.fog, { density:0.022, duration:1.8 }); }
@@ -642,7 +597,7 @@ window.toggleWeather = function() {
     track.classList.remove('rainy');
     thumb.textContent = '☀';
     label.textContent = 'DRY SEASON';
-    stopRain();
+    stopThunder();
     if (rainLines) rainLines.visible = false;
     modelSettings.cloudOpacity = 0;
     gsap.to(scene.background, { r:0.941, g:0.961, b:0.980, duration:1.8 });
@@ -850,16 +805,23 @@ function setupLabels() {
 function updatePlaneText(mesh, newText) {
   const canvas = mesh.material.map.image;
   const ctx = canvas.getContext('2d');
-  
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'rgba(15, 39, 68, 1)';
+
+  ctx.fillStyle = 'rgba(15, 39, 68, 0.85)';
   ctx.roundRect(10, 10, 492, 236, 20);
   ctx.fill();
+
   ctx.strokeStyle = '#2e9fd4';
+  ctx.lineWidth = 12;
   ctx.stroke();
-  ctx.fillStyle = '#ffffff';F
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 70px Outfit, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   ctx.fillText(newText, canvas.width / 2, canvas.height / 2);
-  
+
   mesh.material.map.needsUpdate = true;
 }
 

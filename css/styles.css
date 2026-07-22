@@ -143,36 +143,6 @@ html,body{height:100%;background:var(--navy);color:var(--text-dk);font-family:'O
 #cvs-wrap{position:absolute;inset:0}
 #cvs-wrap canvas{width:100%!important;height:100%!important;display:block}
 
-/* RAIN CANVAS OVERLAY */
-#rainCanvas {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .8s;
-
-  /* â”€â”€ THE CUT â”€â”€ */
-  /* This hides the rain on the left 20% and right 20% */
-  /* black = visible, transparent = hidden */
-  -webkit-mask-image: linear-gradient(to right, 
-    transparent 0%, 
-    transparent 20%, 
-    black 20%, 
-    black 80%, 
-    transparent 80%, 
-    transparent 100%
-  );
-  mask-image: linear-gradient(to right, 
-    transparent 0%, 
-    transparent 20%, 
-    black 20%, 
-    black 80%, 
-    transparent 80%, 
-    transparent 100%
-  );
-}
-
 /* LIGHTNING FLASH */
 #lightning{
   position:absolute;inset:0;z-index:6;pointer-events:none;
@@ -390,7 +360,6 @@ body.settings-mode #rightPanel,
 body.settings-mode #uiPanel,
 body.settings-mode #contextBar,
 body.settings-mode .nav-tabs{display:none!important}
-body.settings-mode #rainCanvas{opacity:0!important}
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    SIDE PANELS â€” white cards
