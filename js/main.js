@@ -399,6 +399,11 @@ function bindModelSettingsControls() {
 }
 
 window.toggleModelSettings = function(force) {
+  if (isIsolated) {
+    showPreviewExitWarning();
+    return;
+  }
+
   const open = force === undefined ? !isSettingsMode : !!force;
   isSettingsMode = open;
   const btn = document.getElementById('btnModelSettings');
@@ -409,21 +414,6 @@ window.toggleModelSettings = function(force) {
 
   if (open) {
     settingsStageBefore = currentStage;
-    if (isIsolated) {
-      isIsolated = false;
-      scene.children.forEach(c => {
-        if (c.userData._v !== undefined) {
-          c.visible = c.userData._v;
-          delete c.userData._v;
-        }
-      });
-      const bic = document.getElementById('blockInfoCard');
-      if (bic) bic.style.display = 'none';
-      const btnExit = document.getElementById('btnExit');
-      if (btnExit) btnExit.style.display = 'none';
-      const ui = document.getElementById('uiPanel');
-      if (ui) ui.style.opacity = '1';
-    }
     // Show full main model, hide infrastructure-only variant
     if (baseGround) baseGround.visible = true;
     if (baseWithHoles) baseWithHoles.visible = false;
@@ -841,6 +831,10 @@ window.goHome = goHome;
 
 // ── GO HOME ────────────────────────────────────────────────────────────
 function goHome() {
+  if (isIsolated) {
+    showPreviewExitWarning();
+    return;
+  }
   window.location.reload();
 }
 
@@ -1178,7 +1172,23 @@ function finishLoad() {
 }
 
 // ── STAGE SWITCHING ───────────────────────────────────────────────────
+let previewWarnTimer = null;
+
+function showPreviewExitWarning() {
+  const el = document.getElementById('previewWarn');
+  if (!el) return;
+  el.classList.add('show');
+  if (previewWarnTimer) clearTimeout(previewWarnTimer);
+  previewWarnTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
 function setStage(s) {
+  // Cube isolate preview: must click EXIT PREVIEW before changing tabs
+  if (isIsolated) {
+    showPreviewExitWarning();
+    return;
+  }
+
   if (isSettingsMode) {
     // Exit settings chrome without recursive setStage
     isSettingsMode = false;
