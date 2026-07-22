@@ -15,9 +15,13 @@ let baseGround, baseWithHoles;
 let currentStage = 1, isIsolated = false;
 let isRainy = false;
 
-let labelP1, labelP2, arrowPump1Left, arrowPump1Right;
+let labelP1, labelP2, arrowPump1Left;
 let pump1ArrowsRising = false;
 let lastPumpStation1Val = 0;
+let pump1ArrowFramesLeft = [];   // HTMLImageElement[250] — assets/arrow_frames/1
+let pump1ArrowFramesReady = false;
+const PUMP1_ARROW_FRAME_COUNT = 250;
+const PUMP1_ARROW_FRAME_FPS = 24; // ~10s per full loop (slower = lower)
 
 const pumpData = { p1_t:0, p1_c:0, p2_t:0, p2_c:0, speed:0.04 };
 const cloudMat = new THREE.MeshStandardMaterial({ color:0x8C8C8C, transparent:true, opacity:0 });
@@ -423,7 +427,6 @@ window.toggleModelSettings = function(force) {
     if (labelP1) labelP1.visible = false;
     if (labelP2) labelP2.visible = false;
     if (arrowPump1Left) arrowPump1Left.visible = false;
-    if (arrowPump1Right) arrowPump1Right.visible = false;
     outlinePass.selectedObjects = [];
     createRainEngine();
     applyModelSettings(modelSettings, { syncUI: true, syncPumps: true });
@@ -501,6 +504,70 @@ function createImagePlane(url, width = 1.2, height = 1.2) {
   });
 
   return mesh;
+}
+
+/** Plane driven by a webp frame sequence (single reusable texture). */
+function createFrameAnimPlane(width = 1.1, height = 1.1) {
+  const geometry = new THREE.PlaneGeometry(width, height);
+  const texture = new THREE.Texture();
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.visible = false;
+  mesh.userData.animTexture = texture;
+  mesh.userData.frameIndex = -1;
+  return mesh;
+}
+
+function loadArrowFrameSequence(folder) {
+  const frames = new Array(PUMP1_ARROW_FRAME_COUNT);
+  const jobs = [];
+  for (let i = 1; i <= PUMP1_ARROW_FRAME_COUNT; i++) {
+    const n = String(i).padStart(4, '0');
+    jobs.push(new Promise((resolve) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => { frames[i - 1] = img; resolve(); };
+      img.onerror = () => resolve();
+      img.src = `assets/arrow_frames/${folder}/${n}.webp`;
+    }));
+  }
+  return Promise.all(jobs).then(() => frames);
+}
+
+function preloadPump1ArrowFrames() {
+  return loadArrowFrameSequence('1').then((left) => {
+    pump1ArrowFramesLeft = left;
+    pump1ArrowFramesReady = !!left[0];
+
+    if (pump1ArrowFramesReady) {
+      setArrowFrame(arrowPump1Left, pump1ArrowFramesLeft, 0);
+      syncPump1ArrowVisibility(lastPumpStation1Val);
+    }
+  });
+}
+
+function setArrowFrame(arrow, frames, index) {
+  if (!arrow || !frames?.length) return;
+  const img = frames[index];
+  if (!img) return;
+  const tex = arrow.userData.animTexture || arrow.material.map;
+  if (!tex) return;
+  if (arrow.userData.frameIndex === index) return;
+  tex.image = img;
+  tex.needsUpdate = true;
+  arrow.userData.animTexture = tex;
+  arrow.material.map = tex;
+  arrow.userData.frameIndex = index;
 }
 
 function startThunder() {
@@ -823,58 +890,42 @@ function setupLabels() {
   labelP2.visible = false;
   scene.add(labelP2);
 
-  // Yellow arrows under PUMP 1 — tune each arrow's leftPx / gapPx independently
-  // leftPx: + = screen-left (+Z), − = screen-right (−Z)  |  gapPx: space below label → arrow top
-  arrowPump1Left = createImagePlane('assets/images/arrow_left-pump1.png', 1.1, 1.1);
-  arrowPump1Left.userData.planeH = 1.1;
-  arrowPump1Left.userData.leftPx = 160;
-  arrowPump1Left.userData.gapPx = 80;
-  arrowPump1Left.rotation.y = Math.PI / 2;
+  // Left arrow under PUMP 1 — animated via assets/arrow_frames/1/*.webp
+  // offsetLeft: + = screen-left (+Z)  |  offsetGap: world units from label bottom → arrow top
+  const arrowSize = 2.4;
+  arrowPump1Left = createFrameAnimPlane(arrowSize, arrowSize);
+  arrowPump1Left.userData.planeH = arrowSize;
+  arrowPump1Left.userData.offsetLeft = 1.4;
+  arrowPump1Left.userData.offsetGap = 0.2;
   arrowPump1Left.visible = false;
-  scene.add(arrowPump1Left);
-
-  arrowPump1Right = createImagePlane('assets/images/arrow_right_pump1.png', 1.1, 1.1);
-  arrowPump1Right.userData.planeH = 1.1;
-  arrowPump1Right.userData.leftPx = 50;
-  arrowPump1Right.userData.gapPx = 60;
-  arrowPump1Right.rotation.y = Math.PI / 2;
-  arrowPump1Right.visible = false;
-  scene.add(arrowPump1Right);
+  // Cancel label scale (0.5) so arrow keeps its world size; share label rotation via parent
+  arrowPump1Left.scale.setScalar(1 / labelP2.scale.x);
+  labelP2.add(arrowPump1Left);
 
   placeArrowsRelativeToPump1();
+  preloadPump1ArrowFrames();
 }
 
-/** Place each PUMP 1 arrow from its own leftPx / gapPx (no mirroring). */
+/** Place PUMP 1 left arrow in label-local space (fixed world offsets — independent of zoom). */
 function placeArrowsRelativeToPump1() {
-  if (!labelP2 || !camera) return;
+  if (!labelP2 || !arrowPump1Left) return;
 
-  const labelHalfH = (2 * labelP2.scale.y) / 2;
-  const dist = camera.position.distanceTo(labelP2.position);
-  const vFov = THREE.MathUtils.degToRad(camera.fov);
-  const worldPerPx = (2 * Math.tan(vFov / 2) * dist) / window.innerHeight;
+  const s = labelP2.scale.y || 1;
+  const labelHalfHLocal = 1;
+  const offsetLeft = arrowPump1Left.userData.offsetLeft ?? 0;
+  const offsetGap = arrowPump1Left.userData.offsetGap ?? 0;
+  const arrowHalfW = (arrowPump1Left.userData.planeH || 2.4) / 2;
 
-  const place = (arrow) => {
-    if (!arrow) return;
-    const leftPx = arrow.userData.leftPx ?? 0;
-    const gapPx = arrow.userData.gapPx ?? 0;
-    const arrowHalfH = (arrow.userData.planeH || 1.1) / 2;
-    const baseY = labelP2.position.y - labelHalfH - gapPx * worldPerPx - arrowHalfH;
-
-    arrow.userData.baseX = labelP2.position.x;
-    arrow.userData.baseY = baseY;
-    arrow.userData.baseZ = labelP2.position.z + leftPx * worldPerPx;
-
-    arrow.position.x = arrow.userData.baseX;
-    arrow.position.z = arrow.userData.baseZ;
-    // Y set in animatePump1Arrows (bob while rising)
-    if (!pump1ArrowsRising) arrow.position.y = baseY;
-  };
-
-  place(arrowPump1Left);
-  place(arrowPump1Right);
+  // Parent applies scale, so divide world offsets by scale for local positions.
+  // Label Ry=90°: local −X maps to world +Z (screen-left from pumping camera).
+  arrowPump1Left.position.set(
+    -offsetLeft / s,
+    -(labelHalfHLocal + offsetGap / s + arrowHalfW / s),
+    0
+  );
 }
 
-/** Pump Station 1 = dialP2 / pumpData.p2 — show arrows only while increasing. */
+/** Pump Station 1 = dialP2 / pumpData.p2 — show arrow only while increasing. */
 function syncPump1ArrowVisibility(nextVal) {
   const prev = lastPumpStation1Val;
   if (nextVal > prev + 0.0005) {
@@ -884,21 +935,15 @@ function syncPump1ArrowVisibility(nextVal) {
   }
   lastPumpStation1Val = nextVal;
 
-  const show = currentStage === 3 && !isSettingsMode && pump1ArrowsRising;
+  const show = currentStage === 3 && !isSettingsMode && pump1ArrowsRising && pump1ArrowFramesReady;
   if (arrowPump1Left) arrowPump1Left.visible = show;
-  if (arrowPump1Right) arrowPump1Right.visible = show;
 }
 
-/** GIF-style loop: slide up, then snap back. */
+/** Play left webp frame sequence (assets/arrow_frames/1). */
 function animatePump1Arrows(elapsed) {
-  if (!pump1ArrowsRising) return;
-  const cycle = (elapsed * 0.85) % 1; // 0→1 (slower loop)
-  const bob = cycle * 0.4; // rise ~0.4 world units then reset
-
-  [arrowPump1Left, arrowPump1Right].forEach((arrow) => {
-    if (!arrow || arrow.userData.baseY === undefined) return;
-    arrow.position.y = arrow.userData.baseY + bob;
-  });
+  if (!pump1ArrowsRising || !pump1ArrowFramesReady) return;
+  const frameIndex = Math.floor(elapsed * PUMP1_ARROW_FRAME_FPS) % PUMP1_ARROW_FRAME_COUNT;
+  setArrowFrame(arrowPump1Left, pump1ArrowFramesLeft, frameIndex);
 }
 
 
@@ -1075,7 +1120,6 @@ function setStage(s) {
   if (s !== 3) {
     pump1ArrowsRising = false;
     if (arrowPump1Left) arrowPump1Left.visible = false;
-    if (arrowPump1Right) arrowPump1Right.visible = false;
   } else {
     syncPump1ArrowVisibility(pumpData.p2_t);
   }
