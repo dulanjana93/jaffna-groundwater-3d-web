@@ -15,7 +15,9 @@ let baseGround, baseWithHoles;
 let currentStage = 1, isIsolated = false;
 let isRainy = false;
 
-let labelP1, labelP2;
+let labelP1, labelP2, arrowPump1Left, arrowPump1Right;
+let pump1ArrowsRising = false;
+let lastPumpStation1Val = 0;
 
 const pumpData = { p1_t:0, p1_c:0, p2_t:0, p2_c:0, speed:0.04 };
 const cloudMat = new THREE.MeshStandardMaterial({ color:0x8C8C8C, transparent:true, opacity:0 });
@@ -420,6 +422,8 @@ window.toggleModelSettings = function(force) {
     interactiveBlocks.forEach(b => b.visible = false);
     if (labelP1) labelP1.visible = false;
     if (labelP2) labelP2.visible = false;
+    if (arrowPump1Left) arrowPump1Left.visible = false;
+    if (arrowPump1Right) arrowPump1Right.visible = false;
     outlinePass.selectedObjects = [];
     createRainEngine();
     applyModelSettings(modelSettings, { syncUI: true, syncPumps: true });
@@ -477,6 +481,25 @@ function createTextPlane(text) {
   });
   
   const mesh = new THREE.Mesh(geometry, material);
+  return mesh;
+}
+
+function createImagePlane(url, width = 1.2, height = 1.2) {
+  const geometry = new THREE.PlaneGeometry(width, height);
+  const material = new THREE.MeshBasicMaterial({
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.visible = false;
+
+  new THREE.TextureLoader().load(url, (texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    material.map = texture;
+    material.needsUpdate = true;
+  });
+
   return mesh;
 }
 
@@ -799,6 +822,83 @@ function setupLabels() {
   labelP2.rotation.y = Math.PI / 2;
   labelP2.visible = false;
   scene.add(labelP2);
+
+  // Yellow arrows under PUMP 1 — tune each arrow's leftPx / gapPx independently
+  // leftPx: + = screen-left (+Z), − = screen-right (−Z)  |  gapPx: space below label → arrow top
+  arrowPump1Left = createImagePlane('assets/images/arrow_left-pump1.png', 1.1, 1.1);
+  arrowPump1Left.userData.planeH = 1.1;
+  arrowPump1Left.userData.leftPx = 160;
+  arrowPump1Left.userData.gapPx = 80;
+  arrowPump1Left.rotation.y = Math.PI / 2;
+  arrowPump1Left.visible = false;
+  scene.add(arrowPump1Left);
+
+  arrowPump1Right = createImagePlane('assets/images/arrow_right_pump1.png', 1.1, 1.1);
+  arrowPump1Right.userData.planeH = 1.1;
+  arrowPump1Right.userData.leftPx = 50;
+  arrowPump1Right.userData.gapPx = 60;
+  arrowPump1Right.rotation.y = Math.PI / 2;
+  arrowPump1Right.visible = false;
+  scene.add(arrowPump1Right);
+
+  placeArrowsRelativeToPump1();
+}
+
+/** Place each PUMP 1 arrow from its own leftPx / gapPx (no mirroring). */
+function placeArrowsRelativeToPump1() {
+  if (!labelP2 || !camera) return;
+
+  const labelHalfH = (2 * labelP2.scale.y) / 2;
+  const dist = camera.position.distanceTo(labelP2.position);
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+  const worldPerPx = (2 * Math.tan(vFov / 2) * dist) / window.innerHeight;
+
+  const place = (arrow) => {
+    if (!arrow) return;
+    const leftPx = arrow.userData.leftPx ?? 0;
+    const gapPx = arrow.userData.gapPx ?? 0;
+    const arrowHalfH = (arrow.userData.planeH || 1.1) / 2;
+    const baseY = labelP2.position.y - labelHalfH - gapPx * worldPerPx - arrowHalfH;
+
+    arrow.userData.baseX = labelP2.position.x;
+    arrow.userData.baseY = baseY;
+    arrow.userData.baseZ = labelP2.position.z + leftPx * worldPerPx;
+
+    arrow.position.x = arrow.userData.baseX;
+    arrow.position.z = arrow.userData.baseZ;
+    // Y set in animatePump1Arrows (bob while rising)
+    if (!pump1ArrowsRising) arrow.position.y = baseY;
+  };
+
+  place(arrowPump1Left);
+  place(arrowPump1Right);
+}
+
+/** Pump Station 1 = dialP2 / pumpData.p2 — show arrows only while increasing. */
+function syncPump1ArrowVisibility(nextVal) {
+  const prev = lastPumpStation1Val;
+  if (nextVal > prev + 0.0005) {
+    pump1ArrowsRising = true;
+  } else if (nextVal < prev - 0.0005 || nextVal <= 0) {
+    pump1ArrowsRising = false;
+  }
+  lastPumpStation1Val = nextVal;
+
+  const show = currentStage === 3 && !isSettingsMode && pump1ArrowsRising;
+  if (arrowPump1Left) arrowPump1Left.visible = show;
+  if (arrowPump1Right) arrowPump1Right.visible = show;
+}
+
+/** GIF-style loop: slide up, then snap back. */
+function animatePump1Arrows(elapsed) {
+  if (!pump1ArrowsRising) return;
+  const cycle = (elapsed * 0.85) % 1; // 0→1 (slower loop)
+  const bob = cycle * 0.4; // rise ~0.4 world units then reset
+
+  [arrowPump1Left, arrowPump1Right].forEach((arrow) => {
+    if (!arrow || arrow.userData.baseY === undefined) return;
+    arrow.position.y = arrow.userData.baseY + bob;
+  });
 }
 
 
@@ -971,6 +1071,14 @@ function setStage(s) {
   // 4. Toggle 3D Labels (Pumping labels now show on stage 3)
   if (labelP1) labelP1.visible = (s === 3);
   if (labelP2) labelP2.visible = (s === 3);
+  // Arrows only while Pump Station 1 is being increased
+  if (s !== 3) {
+    pump1ArrowsRising = false;
+    if (arrowPump1Left) arrowPump1Left.visible = false;
+    if (arrowPump1Right) arrowPump1Right.visible = false;
+  } else {
+    syncPump1ArrowVisibility(pumpData.p2_t);
+  }
 
   // 5. Handle 3D Object Visibility (Infrastructure specific logic moved to stage 4)
   if (baseGround)     baseGround.visible    = (s !== 4);
@@ -1040,7 +1148,11 @@ function setupInteractions(){
 
   document.getElementById('btnExit').onclick=deIsolate;
   document.getElementById('dialP1').oninput=(e)=>{pumpData.p1_t=parseFloat(e.target.value);refreshPumpUI();};
-  document.getElementById('dialP2').oninput=(e)=>{pumpData.p2_t=parseFloat(e.target.value);refreshPumpUI();};
+  document.getElementById('dialP2').oninput=(e)=>{
+    pumpData.p2_t=parseFloat(e.target.value);
+    syncPump1ArrowVisibility(pumpData.p2_t);
+    refreshPumpUI();
+  };
 }
 
 function refreshPumpUI(){
@@ -1125,6 +1237,10 @@ function animate(){
 
   controls.update();
   updateWaterLevelArrowPositions();
+  if (currentStage === 3) {
+    placeArrowsRelativeToPump1();
+    animatePump1Arrows(settingsClock.getElapsedTime());
+  }
   composer.render();
 }
 
