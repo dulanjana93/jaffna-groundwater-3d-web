@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Diorama - Unified Ocean Preview</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #0f2744; font-family: sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; pointer-events: none; transition: opacity 0.5s ease; z-index: 10; font-family: monospace; }
+        
+        /* Control Dashboard Overlay Styling */
+        #controls-ui {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(15, 39, 68, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            color: white;
+            z-index: 100;
+            font-family: monospace;
+            width: 300px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            backdrop-filter: blur(5px);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .control-group { margin-bottom: 15px; }
+        .control-group:last-child { margin-bottom: 0; }
+        .control-group h4 { margin: 0 0 10px 0; color: #4fc3f7; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
+        .slider-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 11px;
+        }
+        .slider-row:last-child { margin-bottom: 0; }
+        .slider-row label { width: 105px; }
+        .slider-row input {
+            width: 115px;
+            margin: 0;
+        }
+        .slider-row span {
+            width: 40px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading Diorama Assets...</div>
+    
+    <div id="controls-ui">
+        <div class="control-group">
+            <h4>Global Water & Dynamic Controls</h4>
+            <div class="slider-row">
+                <label>Wave Height:</label>
+                <input type="range" id="wave-height" min="0" max="0.5" step="0.01" value="0.14">
+                <span id="wave-height-val">0.14</span>
+            </div>
+            <div class="slider-row">
+                <label>Size/Freq:</label>
+                <input type="range" id="wave-freq" min="0.5" max="10.0" step="0.1" value="2.8">
+                <span id="wave-freq-val">2.8</span>
+            </div>
+            <div class="slider-row">
+                <label>Wave/Rain Speed:</label>
+                <input type="range" id="wave-speed" min="0" max="5.0" step="0.1" value="2.0">
+                <span id="wave-speed-val">2.0</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h4>Rain Dynamics & Wind</h4>
+            <div class="slider-row">
+                <label>Rain Amount:</label>
+                <input type="range" id="rain-count" min="0" max="1500" step="10" value="600">
+                <span id="rain-count-val">600</span>
+            </div>
+            <div class="slider-row">
+                <label>Rain Length:</label>
+                <input type="range" id="rain-length" min="0.1" max="1.5" step="0.05" value="0.40">
+                <span id="rain-length-val">0.40</span>
+            </div>
+            <div class="slider-row">
+                <label>Wind Velocity X:</label>
+                <input type="range" id="wind-x" min="-5.0" max="5.0" step="0.1" value="1.5">
+                <span id="wind-x-val">1.5</span>
+            </div>
+            <div class="slider-row">
+                <label>Wind Velocity Z:</label>
+                <input type="range" id="wind-z" min="-5.0" max="5.0" step="0.1" value="0.0">
+                <span id="wind-z-val">0.0</span>
+            </div>
+            <div class="slider-row">
+                <label>Rain Top:</label>
+                <input type="range" id="rain-top" min="1.0" max="5.0" step="0.2" value="10.0">
+                <span id="rain-top-val">3.2</span>
+            </div>
+            <div class="slider-row">
+                <label>Rain Bottom:</label>
+                <input type="range" id="rain-bottom" min="0.0" max="5.0" step="0.1" value="1.5">
+                <span id="rain-bottom-val">-1</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h4>Shape Key & Cloud Modifiers</h4>
+            <div class="slider-row">
+                <label>Key 4:</label>
+                <input type="range" id="shape-key-4" min="0" max="1" step="0.01" value="0">
+                <span id="shape-key-4-val">0.00</span>
+            </div>
+            <div class="slider-row">
+                <label>Key 5:</label>
+                <input type="range" id="shape-key-5" min="0" max="1" step="0.01" value="0">
+                <span id="shape-key-5-val">0.00</span>
+            </div>
+            <div class="slider-row">
+                <label>Dry Season:</label>
+                <input type="range" id="shape-key-dry" min="0" max="1" step="0.01" value="0">
+                <span id="shape-key-dry-val">0.00</span>
+            </div>
+            <div class="slider-row">
+                <label>Cloud Opacity:</label>
+                <input type="range" id="cloud-opacity" min="0" max="1" step="0.01" value="0.60">
+                <span id="cloud-opacity-val">0.60</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        
+        scene.background = new THREE.Color(0x0a141d);
+        scene.fog = new THREE.FogExp2(0x0a141d, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(28, 18, 28);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 2, 0);
+
+        // --- ENVIRONMENT LIGHTING SETUP ---
+        scene.add(new THREE.AmbientLight(0xffffff, 1));
+        scene.add(new THREE.HemisphereLight(0xfaf5ee, 0xc8d8e8, 0.6));
+
+        const sun = new THREE.DirectionalLight(0xfff8f0, 1);
+        sun.position.set(20, 40, 20);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = 2048;
+        sun.shadow.mapSize.height = 2048;
+        sun.shadow.bias = -0.001;
+        scene.add(sun);
+
+        const fill = new THREE.DirectionalLight(0xc8d8f0, 1.2);
+        fill.position.set(-20, 10, -20);
+        scene.add(fill);
+
+        // --- UNIFIED GLOBAL WAVE STATE UNIFORMS ---
+        const sharedWaveUniforms = {
+            uTime: { value: 0 },
+            uWaveHeight: { value: 0.14 },
+            uWaveFrequency: { value: 2.8 },
+            uWaveSpeed: { value: 2.0 }
+        };
+
+        // --- SHADER COMPILER ENGINE ---
+        function applyUnifiedWaveShader(material, targetColorHex) {
+            material.color.setHex(targetColorHex);
+            material.roughness = 0.15;
+            material.metalness = 0.1;
+            material.transparent = true;
+            material.opacity = 0.85;
+
+            material.onBeforeCompile = (shader) => {
+                shader.uniforms.uTime = sharedWaveUniforms.uTime;
+                shader.uniforms.uWaveHeight = sharedWaveUniforms.uWaveHeight;    
+                shader.uniforms.uWaveFrequency = sharedWaveUniforms.uWaveFrequency; 
+                shader.uniforms.uWaveSpeed = sharedWaveUniforms.uWaveSpeed;     
+
+                shader.vertexShader = `
+                    attribute float _surface;
+                    attribute float surface;
+                    uniform float uTime;
+                    uniform float uWaveHeight;
+                    uniform float uWaveFrequency;
+                    uniform float uWaveSpeed;
+                \n` + shader.vertexShader;
+
+                shader.vertexShader = shader.vertexShader.replace(
+                    '#include <begin_vertex>',
+                    `
+                    #include <begin_vertex>
+                    
+                    float mask = max(_surface, surface);
+                    
+                    if(mask == 0.0) {
+                        mask = step(0.9, normal.y);
+                    }
+
+                    if (mask > 0.0) {
+                        float wave = sin(position.x * uWaveFrequency + uTime * uWaveSpeed) * cos(position.z * uWaveFrequency * 0.9 + uTime * uWaveSpeed * 1.1);
+                        transformed.y += wave * uWaveHeight * mask;
+                    }
+                    `
+                );
+            };
+        }
+
+        // --- SINGLE CONTROL HOOK OVERLAYS ---
+        const bindControlSlider = (sliderId, textId, targetUniformProperty) => {
+            const input = document.getElementById(sliderId);
+            const label = document.getElementById(textId);
+            input.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                label.innerText = val;
+                targetUniformProperty.value = val;
+            });
+        };
+
+        bindControlSlider('wave-height', 'wave-height-val', sharedWaveUniforms.uWaveHeight);
+        bindControlSlider('wave-freq', 'wave-freq-val', sharedWaveUniforms.uWaveFrequency);
+        bindControlSlider('wave-speed', 'wave-speed-val', sharedWaveUniforms.uWaveSpeed);
+
+        // --- SHAPE KEY TRACKING REGISTER ---
+        const morphTargetsCollection = [];
+
+        const setupMorphController = (sliderId, textId, targetKeyNameOrIndex) => {
+            const input = document.getElementById(sliderId);
+            const label = document.getElementById(textId);
+
+            input.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                label.innerText = val.toFixed(2);
+
+                morphTargetsCollection.forEach(mesh => {
+                    if (!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return;
+
+                    const index = mesh.morphTargetDictionary[targetKeyNameOrIndex];
+                    if (index !== undefined) {
+                        mesh.morphTargetInfluences[index] = val;
+                    }
+                });
+            });
+        };
+
+        setupMorphController('shape-key-4', 'shape-key-4-val', 'Key 4');
+        setupMorphController('shape-key-5', 'shape-key-5-val', 'Key 5');
+        setupMorphController('shape-key-dry', 'shape-key-dry-val', 'dry season');
+
+        // --- CLOUD OPACITY REGISTER TRACKER ---
+        const cloudMaterialsCollection = [];
+        const cloudSlider = document.getElementById('cloud-opacity');
+        const cloudLabel = document.getElementById('cloud-opacity-val');
+
+        cloudSlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            cloudLabel.innerText = val.toFixed(2);
+            cloudMaterialsCollection.forEach(mat => { mat.opacity = val; });
+        });
+
+        // --- LINE-BASED ATMOSPHERIC BOUNDS RAIN ENGINE ---
+        let rainLines;
+        let maxRaindrops = 1500; 
+        let activeRainCount = 600;
+        let rainLength = 0.40;
+        
+        let windVelocityX = 1.5;
+        let windVelocityZ = 0.0;
+        
+        const rainBaseSpeedMultiplier = 6.0; 
+        const individualSpeeds = new Float32Array(maxRaindrops);
+
+        const rainBounds = {
+            minX: -8, maxX: 8,
+            minY: 1.5, maxY: 10.0,
+            minZ: -8, maxZ: 8
+        };
+
+        function updateVolumeBoundaries(mesh) {
+            if (mesh) {
+                mesh.geometry.computeBoundingBox();
+                const box = new THREE.Box3();
+                box.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);
+                
+                rainBounds.minX = box.min.x;
+                rainBounds.maxX = box.max.x;
+                rainBounds.minZ = box.min.z;
+                rainBounds.maxZ = box.max.z;
+            }
+
+            rainBounds.minY = parseFloat(document.getElementById('rain-bottom').value);
+            rainBounds.maxY = parseFloat(document.getElementById('rain-top').value);
+
+            if (rainLines) {
+                const positions = rainLines.geometry.attributes.position.array;
+                for(let i = 0; i < maxRaindrops; i++) {
+                    resetRaindrop(positions, i, true);
+                }
+                rainLines.geometry.attributes.position.needsUpdate = true;
+            }
+        }
+
+        // RANDOMIZED RAIN START POSITION & TRAJECTORY ENGINE
+        function resetRaindrop(positions, index, isInitialSpawn = false) {
+            const x = THREE.MathUtils.randFloat(rainBounds.minX, rainBounds.maxX);
+            
+            const y = isInitialSpawn 
+                ? THREE.MathUtils.randFloat(rainBounds.minY, rainBounds.maxY)
+                : THREE.MathUtils.randFloat(rainBounds.maxY, rainBounds.maxY + 1.5);
+                
+            const z = THREE.MathUtils.randFloat(rainBounds.minZ, rainBounds.maxZ);
+
+            individualSpeeds[index] = THREE.MathUtils.randFloat(0.7, 1.4);
+
+            const dropLength = rainLength * THREE.MathUtils.randFloat(0.8, 1.2);
+
+            const baseIdx = index * 6;
+            positions[baseIdx] = x;
+            positions[baseIdx+1] = y;
+            positions[baseIdx+2] = z;
+            
+            positions[baseIdx+3] = x - windVelocityX * dropLength * 0.1;
+            positions[baseIdx+4] = y - dropLength;
+            positions[baseIdx+5] = z - windVelocityZ * dropLength * 0.1;
+        }
+
+        function createRainEngine() {
+            const positions = new Float32Array(maxRaindrops * 6);
+            
+            for(let i = 0; i < maxRaindrops; i++) {
+                resetRaindrop(positions, i, true);
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const material = new THREE.LineBasicMaterial({
+                color: 0x8bb8e2,
+                transparent: true,
+                opacity: 0.5,
+                depthWrite: false,
+                blending: THREE.NormalBlending
+            });
+
+            rainLines = new THREE.LineSegments(geometry, material);
+            scene.add(rainLines);
+            rainLines.geometry.setDrawRange(0, activeRainCount * 2);
+        }
+
+        function updateRainEngine(deltaTime) {
+            if (!rainLines) return;
+
+            const positions = rainLines.geometry.attributes.position.array;
+            const sharedBaseSpeed = sharedWaveUniforms.uWaveSpeed.value * rainBaseSpeedMultiplier;
+
+            for (let i = 0; i < maxRaindrops; i++) {
+                const baseIdx = i * 6;
+                const customFallSpeed = sharedBaseSpeed * individualSpeeds[i];
+
+                positions[baseIdx]   -= windVelocityX * customFallSpeed * 0.1 * deltaTime;
+                positions[baseIdx+1] -= customFallSpeed * deltaTime;
+                positions[baseIdx+2] -= windVelocityZ * customFallSpeed * 0.1 * deltaTime;
+
+                if (positions[baseIdx+1] < rainBounds.minY) {
+                    resetRaindrop(positions, i, false);
+                } else {
+                    positions[baseIdx+3] = positions[baseIdx]   - (windVelocityX * rainLength * 0.15);
+                    positions[baseIdx+4] = positions[baseIdx+1] - rainLength;
+                    positions[baseIdx+5] = positions[baseIdx+2] - (windVelocityZ * rainLength * 0.15);
+                }
+            }
+
+            rainLines.geometry.attributes.position.needsUpdate = true;
+        }
+
+        // --- DYNAMIC UI ADJUSTMENT REGISTER INTERACTION PASSE ---
+        document.getElementById('rain-count').addEventListener('input', (e) => {
+            activeRainCount = parseInt(e.target.value);
+            document.getElementById('rain-count-val').innerText = activeRainCount;
+            if (rainLines) rainLines.geometry.setDrawRange(0, activeRainCount * 2);
+        });
+
+        document.getElementById('rain-length').addEventListener('input', (e) => {
+            rainLength = parseFloat(e.target.value);
+            document.getElementById('rain-length-val').innerText = rainLength.toFixed(2);
+        });
+
+        document.getElementById('wind-x').addEventListener('input', (e) => {
+            windVelocityX = parseFloat(e.target.value);
+            document.getElementById('wind-x-val').innerText = windVelocityX.toFixed(1);
+        });
+
+        document.getElementById('wind-z').addEventListener('input', (e) => {
+            windVelocityZ = parseFloat(e.target.value);
+            document.getElementById('wind-z-val').innerText = windVelocityZ.toFixed(1);
+        });
+
+        document.getElementById('rain-top').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            rainBounds.maxY = val;
+            document.getElementById('rain-top-val').innerText = val.toFixed(1);
+        });
+
+        document.getElementById('rain-bottom').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            rainBounds.minY = val;
+            document.getElementById('rain-bottom-val').innerText = val.toFixed(1);
+        });
+
+        // --- LIGHTNING SHADER MATERIAL ENGINE ---
+        function createLightningMaterial() {
+            return new THREE.ShaderMaterial({
+                uniforms: {
+                    uOpacity: { value: 0.0 },
+                    uColor: { value: new THREE.Color(0xe0f7fc) }, 
+                    uGlowColor: { value: new THREE.Color(0x50a0ff) }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float uOpacity;
+                    uniform vec3 uColor;
+                    uniform vec3 uGlowColor;
+                    varying vec3 vNormal;
+
+                    void main() {
+                        if (uOpacity <= 0.01) discard;
+                        
+                        float intensity = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 1.5);
+                        vec3 finalColor = mix(uColor * 4.0, uGlowColor * 2.5, intensity);
+
+                        gl_FragColor = vec4(finalColor, uOpacity);
+                    }
+                `,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+        }
+
+        // --- GLTF MODEL LOADING LOOP PIPELINE ---
+        const loadingEl = document.getElementById('loading');
+        const loader = new GLTFLoader();
+        let loadedCount = 0;
+        const totalAssets = 5;
+
+        function checkLoadingState() {
+            loadedCount++;
+            if (loadedCount === totalAssets) {
+                loadingEl.style.opacity = 0;
+                setTimeout(() => loadingEl.remove(), 500);
+            }
+        }
+
+        // 1. Ground Mesh
+        loader.load('assets/models/gnd-compressed.glb', (gltf) => {
+            gltf.scene.traverse(c => { 
+                if (c.isMesh) { 
+                    c.receiveShadow = true; 
+                    c.castShadow = true; 
+                    if (c.name === 'weather_volume') {
+                        c.visible = false;
+                        setTimeout(() => updateVolumeBoundaries(c), 100);
+                    }
+                } 
+            });
+            scene.add(gltf.scene);
+            checkLoadingState();
+        });
+
+        // 2. Saltwater Mesh
+        loader.load('assets/models/salt.glb', (gltf) => {
+            gltf.scene.traverse(c => {
+                if (c.isMesh) {
+                    c.castShadow = true;
+                    c.receiveShadow = true;
+                    applyUnifiedWaveShader(c.material, 0x1a7fc1);
+                    if (c.morphTargetDictionary) {
+                        morphTargetsCollection.push(c);
+                    }
+                }
+            });
+            scene.add(gltf.scene);
+            checkLoadingState();
+        });
+
+        // 3. Freshwater Mesh
+        loader.load('assets/models/fresh.glb', (gltf) => {
+            gltf.scene.traverse(c => {
+                if (c.isMesh) {
+                    c.castShadow = true;
+                    c.receiveShadow = true;
+                    applyUnifiedWaveShader(c.material, 0x2e9fd4);
+                    if (c.morphTargetDictionary) {
+                        morphTargetsCollection.push(c);
+                    }
+                }
+            });
+            scene.add(gltf.scene);
+            checkLoadingState();
+        });
+
+        // --- LIGHTNING REFERENCES REGISTER ---
+        const lightningMeshes = [];
+
+        // 4. Clouds Mesh + Embedded Lightning Objects
+        loader.load('assets/models/clouds-compressed.glb', (gltf) => {
+            createRainEngine(); 
+
+            gltf.scene.traverse(c => {
+                if (c.isMesh) {
+                    const isLightning = c.name.toLowerCase().includes('lightning');
+
+                    if (isLightning) {
+                        c.castShadow = false;
+                        c.receiveShadow = false;
+                        c.material = createLightningMaterial();
+                        c.visible = false;
+                        lightningMeshes.push(c);
+                    } 
+                    else if (c.material) {
+                        c.castShadow = true;
+                        c.material.roughness = 0.9;
+                        c.material.transparent = true;
+                        c.material.opacity = 0.60;
+                        cloudMaterialsCollection.push(c.material);
+                    }
+                }
+            });
+            setTimeout(() => updateVolumeBoundaries(null), 200);
+            scene.add(gltf.scene);
+            checkLoadingState();
+        });
+
+        // 5. Props Mesh Loading Block
+        loader.load('assets/models/props.glb', (gltf) => {
+            gltf.scene.traverse(c => { 
+                if (c.isMesh) { 
+                    c.receiveShadow = true; 
+                    c.castShadow = true; 
+                    if (c.morphTargetDictionary) {
+                        morphTargetsCollection.push(c);
+                    }
+                } 
+            });
+            scene.add(gltf.scene);
+            checkLoadingState();
+        }, undefined, (error) => {
+            console.error('An error happened loading the props model:', error);
+        });
+
+        // --- CORE TICK CLOCK ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
+        let lightningFlashIntensity = 0;
+        let nextLightningTime = 4.0; 
+        let activeLightningMesh = null; 
+
+        const normalAmbientIntensity = 0.4;
+        const normalSunIntensity = 0.8;
+        const normalFogColor = new THREE.Color(0x0a141d);
+        const flashFogColor = new THREE.Color(0x3a4f66);
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const deltaTime = clock.getDelta();
+            const elapsedTime = clock.getElapsedTime();
+
+            sharedWaveUniforms.uTime.value = elapsedTime;
+
+            // 1. TRIGGER NEW STRIKE
+            if (elapsedTime > nextLightningTime) {
+                lightningFlashIntensity = 1.0;
+                nextLightningTime = elapsedTime + THREE.MathUtils.randFloat(4.0, 10.0);
+
+                if (lightningMeshes.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * lightningMeshes.length);
+                    activeLightningMesh = lightningMeshes[randomIndex];
+                }
+
+                if (Math.random() < 0.35) {
+                    setTimeout(() => { lightningFlashIntensity = 0.95; }, 160);
+                }
+            }
+
+            // 2. FADE INTENSITY
+            if (lightningFlashIntensity > 0) {
+                lightningFlashIntensity -= deltaTime * 4.5;
+                if (lightningFlashIntensity < 0) lightningFlashIntensity = 0;
+            }
+
+            // 3. UPDATE LIGHTNING UNIFORMS & FLICKER
+            lightningMeshes.forEach(mesh => {
+                if (mesh === activeLightningMesh && lightningFlashIntensity > 0.05) {
+                    mesh.visible = true;
+                    const jitterAlpha = lightningFlashIntensity * THREE.MathUtils.randFloat(0.75, 1.0);
+                    mesh.material.uniforms.uOpacity.value = Math.min(1.0, jitterAlpha);
+                } else {
+                    mesh.visible = false;
+                    mesh.material.uniforms.uOpacity.value = 0.0;
+                }
+            });
+
+            // 4. FLASH SCENE LIGHTS & ATMOSPHERIC FOG
+            scene.children.forEach(child => {
+                if (child.isAmbientLight) {
+                    child.intensity = normalAmbientIntensity + (lightningFlashIntensity * 3.5);
+                }
+                if (child.isDirectionalLight && child.castShadow) {
+                    child.intensity = normalSunIntensity + (lightningFlashIntensity * 5.0);
+                }
+            });
+
+            scene.background.copy(normalFogColor).lerp(flashFogColor, lightningFlashIntensity * 0.4);
+            scene.fog.color.copy(normalFogColor).lerp(flashFogColor, lightningFlashIntensity * 0.4);
+
+            // 5. UPDATE RAIN AND SCENE RENDERING
+            updateRainEngine(deltaTime);
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
