@@ -680,7 +680,7 @@ function showWaterLevelArrows(rising) {
   el.classList.remove('rising', 'falling', 'show');
   el.classList.add(rising ? 'rising' : 'falling', 'show');
   el.setAttribute('aria-hidden', 'false');
-  if (label) label.textContent = rising ? 'FRESHWATER RISING' : 'FRESHWATER FALLING';
+  if (label) label.textContent = rising ? 'Freshwater Rising' : 'Freshwater Falling';
   waterLevelArrowsVisible = true;
   updateWaterLevelArrowPositions();
 }
@@ -702,7 +702,7 @@ window.toggleWeather = function() {
   if (isRainy) {
     track.classList.add('rainy');
     thumb.textContent = '🌧';
-    label.textContent = 'RAINY SEASON';
+    label.textContent = 'Rainy Season';
     createRainEngine();
     if (rainLines) {
       rainLines.visible = modelSettings.rainCount > 0;
@@ -715,7 +715,7 @@ window.toggleWeather = function() {
   } else {
     track.classList.remove('rainy');
     thumb.textContent = '☀';
-    label.textContent = 'DRY SEASON';
+    label.textContent = 'Dry Season';
     stopThunder();
     if (rainLines) rainLines.visible = false;
     modelSettings.cloudOpacity = 0;
@@ -787,7 +787,7 @@ window.toggleOcean = function() {
   if (!isOceanVisible) {
     track.classList.add('off');
     thumb.textContent = '🫧';
-    label.textContent = 'OCEAN OFF';
+    label.textContent = 'Ocean Off';
     fadeOceanRoot(oceanBottomRoot, false);
     fadeOceanRoot(oceanTopRoot,    false);
     if (covPct) covPct.textContent = '0%';
@@ -796,7 +796,7 @@ window.toggleOcean = function() {
   } else {
     track.classList.remove('off');
     thumb.textContent = '🌊';
-    label.textContent = 'OCEAN ON';
+    label.textContent = 'Ocean On';
     fadeOceanRoot(oceanBottomRoot, true);
     fadeOceanRoot(oceanTopRoot,    true);
     if (covPct) covPct.textContent = '100%';
@@ -852,7 +852,7 @@ function enterApp() {
 function setProgress(pct, label, detail) {
   document.getElementById('bfill').style.width = pct + '%';
   document.getElementById('ptext').textContent = label;
-  document.getElementById('ltext').textContent = label.toUpperCase();
+  document.getElementById('ltext').textContent = label;
   document.getElementById('lbar').style.width  = pct + '%';
   if (detail) document.getElementById('ldetail').textContent = detail;
 }
@@ -909,14 +909,14 @@ function init() {
 }
 
 function setupLabels() {
-  labelP1 = createTextPlane("PUMP 2: 0%");
+  labelP1 = createTextPlane("Pump 2: 0%");
   labelP1.position.set(5, -.6, -1); 
   labelP1.scale.set(.5,.5,.5);
   labelP1.rotation.y = Math.PI / 2; 
   labelP1.visible = false;
   scene.add(labelP1);
 
-  labelP2 = createTextPlane("PUMP 1: 0%");
+  labelP2 = createTextPlane("Pump 1: 0%");
   labelP2.position.set(5, -.6, 4); 
   labelP2.scale.set(.5,.5,.5);
   labelP2.rotation.y = Math.PI / 2;
@@ -1356,8 +1356,8 @@ function refreshPumpUI(){
   const alert=document.getElementById('intrusionAlert');
   if(combined>60) alert.classList.add('show'); else alert.classList.remove('show');
 
-  if(labelP2) updatePlaneText(labelP1, `PUMP 2: ${p1}%`);
-  if(labelP1) updatePlaneText(labelP2, `PUMP 1: ${p2}%`);
+  if(labelP2) updatePlaneText(labelP1, `Pump 2: ${p1}%`);
+  if(labelP1) updatePlaneText(labelP2, `Pump 1: ${p2}%`);
 }
 
 // ── ISOLATION ────────────────────────────────────────────────────────
@@ -1382,7 +1382,7 @@ function isolate(obj,idx){
   document.getElementById('blockInfoCard').style.display='block';
   document.getElementById('btnExit').style.display='block';
   document.getElementById('uiPanel').style.opacity='0.35';
-  document.getElementById('contextBar').textContent='INSPECTING STRUCTURE  ·  CLICK EXIT PREVIEW TO RETURN';
+  document.getElementById('contextBar').textContent='Inspecting Structure  ·  Click Exit Preview to Return';
 }
 
 function deIsolate(){
@@ -1392,6 +1392,7 @@ function deIsolate(){
   document.getElementById('blockInfoCard').style.display='none';
   document.getElementById('btnExit').style.display='none';
   document.getElementById('uiPanel').style.opacity='1';
+  document.getElementById('contextBar').textContent='Orbit · Scroll to Zoom · Drag to Rotate';
   setStage(4);
 }
 
