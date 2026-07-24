@@ -361,9 +361,27 @@ html,body{height:100%;background:var(--navy);color:var(--text-dk);font-family:'O
   margin-bottom:8px;font-size:11px;
 }
 .ms-row:last-child{margin-bottom:0}
-.ms-row label{width:105px;flex-shrink:0;color:#c8dceb}
-.ms-row input[type=range]{width:115px;margin:0;accent-color:#4fc3f7}
+.ms-row label{width:118px;flex-shrink:0;color:#c8dceb}
+.ms-row label.ms-switch{width:auto}
+.ms-row input[type=range]{width:100px;margin:0;accent-color:#4fc3f7}
 .ms-row span{width:40px;text-align:right;color:#fff;flex-shrink:0}
+.ms-toggle-row{min-height:28px}
+.ms-switch{
+  display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;
+  position:relative;
+}
+.ms-switch input{position:absolute;opacity:0;width:0;height:0}
+.ms-switch-ui{
+  width:40px;height:22px;border-radius:11px;background:rgba(255,255,255,.18);
+  position:relative;transition:background .2s;flex-shrink:0;
+}
+.ms-switch-ui::after{
+  content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;
+  border-radius:50%;background:#fff;transition:transform .2s;
+}
+.ms-switch input:checked + .ms-switch-ui{background:#4fc3f7}
+.ms-switch input:checked + .ms-switch-ui::after{transform:translateX(18px)}
+.ms-switch-text{font-size:11px;color:#fff;min-width:24px}
 .ms-presets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ms-preset{
   border:1px solid rgba(255,255,255,.18);border-radius:8px;

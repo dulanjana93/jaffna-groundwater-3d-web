@@ -11,6 +11,7 @@ let oceanParts = [], cloudMeshes = [], interactiveBlocks = [];
 let oceanBottomRoot = null;
 let oceanTopRoot = null;
 let propsModel; // <--- Add this here
+let cloudsRoot = null;
 let baseGround, baseWithHoles;
 let currentStage = 1, isIsolated = false;
 let isRainy = false;
@@ -38,15 +39,19 @@ const DEFAULT_MODEL_SETTINGS = {
   waveHeight: 0.14,
   waveFreq: 2.8,
   waveSpeed: 2.0,
+  rainEnabled: true,
   rainCount: 600,
   rainLength: 0.40,
   windX: 1.5,
   windZ: 0.0,
   rainTop: 3.2,
   rainBottom: -1.0,
+  rainMinX: -8,
+  rainMaxX: 8,
   key4: 0,
   key5: 0,
   drySeason: 1,
+  cloudsEnabled: true,
   cloudOpacity: 0
 };
 let modelSettings = { ...DEFAULT_MODEL_SETTINGS };
@@ -67,7 +72,8 @@ const maxRaindrops = 1500;
 let individualSpeeds = new Float32Array(maxRaindrops);
 const rainBaseSpeedMultiplier = 6.0;
 const rainBounds = {
-  minX: -8, maxX: 8,
+  minX: DEFAULT_MODEL_SETTINGS.rainMinX,
+  maxX: DEFAULT_MODEL_SETTINGS.rainMaxX,
   minY: DEFAULT_MODEL_SETTINGS.rainBottom,
   maxY: DEFAULT_MODEL_SETTINGS.rainTop,
   minZ: -8, maxZ: 8
@@ -186,6 +192,55 @@ function setMorphByName(keyName, value) {
   oceanParts.forEach(m => setMorph(m, keyName, value));
 }
 
+function applyRainVisibility() {
+  if (!rainLines) return;
+  const wantRain = !!modelSettings.rainEnabled && modelSettings.rainCount > 0;
+  rainLines.visible = isSettingsMode ? wantRain : (isRainy && wantRain);
+  rainLines.geometry.setDrawRange(0, modelSettings.rainCount * 2);
+}
+
+function applySceneAtmosphere(dark, duration = 1.2) {
+  if (!scene || !scene.background) return;
+  gsap.killTweensOf(scene.background);
+  if (scene.fog) {
+    gsap.killTweensOf(scene.fog.color);
+    gsap.killTweensOf(scene.fog);
+  }
+  if (dark) {
+    gsap.to(scene.background, { r: 0.04, g: 0.08, b: 0.14, duration });
+    if (scene.fog) {
+      gsap.to(scene.fog.color, { r: 0.04, g: 0.08, b: 0.14, duration });
+      gsap.to(scene.fog, { density: 0.022, duration });
+    }
+  } else {
+    gsap.to(scene.background, { r: 0.941, g: 0.961, b: 0.980, duration });
+    if (scene.fog) {
+      gsap.to(scene.fog.color, { r: 0.867, g: 0.910, b: 0.949, duration });
+      gsap.to(scene.fog, { density: 0.008, duration });
+    }
+  }
+}
+
+function applySettingsRainAtmosphere(duration = 1.2) {
+  if (!isSettingsMode) return;
+  applySceneAtmosphere(!!modelSettings.rainEnabled, duration);
+}
+
+function applyCloudVisibility() {
+  if (cloudsRoot) cloudsRoot.visible = !!modelSettings.cloudsEnabled;
+  cloudMeshes.forEach(m => { m.visible = !!modelSettings.cloudsEnabled; });
+  const opacity = modelSettings.cloudsEnabled ? modelSettings.cloudOpacity : 0;
+  cloudMaterialsCollection.forEach(mat => { mat.opacity = opacity; });
+  cloudMat.opacity = opacity;
+}
+
+function applyRainBoundsFromSettings() {
+  rainBounds.minX = modelSettings.rainMinX;
+  rainBounds.maxX = modelSettings.rainMaxX;
+  rainBounds.minY = modelSettings.rainBottom;
+  rainBounds.maxY = modelSettings.rainTop;
+}
+
 function applyModelSettings(settings, { syncUI = true, syncPumps = true } = {}) {
   modelSettings = { ...DEFAULT_MODEL_SETTINGS, ...settings };
 
@@ -193,21 +248,14 @@ function applyModelSettings(settings, { syncUI = true, syncPumps = true } = {}) 
   sharedWaveUniforms.uWaveFrequency.value = modelSettings.waveFreq;
   sharedWaveUniforms.uWaveSpeed.value = modelSettings.waveSpeed;
 
-  rainBounds.minY = modelSettings.rainBottom;
-  rainBounds.maxY = modelSettings.rainTop;
-  if (rainLines) {
-    rainLines.geometry.setDrawRange(0, modelSettings.rainCount * 2);
-    rainLines.visible = isSettingsMode
-      ? modelSettings.rainCount > 0
-      : (isRainy && modelSettings.rainCount > 0);
-  }
+  applyRainBoundsFromSettings();
+  applyRainVisibility();
+  applyCloudVisibility();
+  if (isSettingsMode) applySettingsRainAtmosphere(0.6);
 
   setMorphByName('Key 4', modelSettings.key4);
   setMorphByName('Key 5', modelSettings.key5);
   setMorphByName('dry season', modelSettings.drySeason);
-
-  cloudMaterialsCollection.forEach(mat => { mat.opacity = modelSettings.cloudOpacity; });
-  cloudMat.opacity = modelSettings.cloudOpacity;
 
   if (syncPumps) {
     pumpData.p1_t = modelSettings.key4;
@@ -237,6 +285,8 @@ function syncSettingsUIFromState() {
     ['ms-wind-z', 'ms-wind-z-val', 'windZ', v => v.toFixed(1)],
     ['ms-rain-top', 'ms-rain-top-val', 'rainTop', v => v.toFixed(1)],
     ['ms-rain-bottom', 'ms-rain-bottom-val', 'rainBottom', v => v.toFixed(1)],
+    ['ms-rain-min-x', 'ms-rain-min-x-val', 'rainMinX', v => v.toFixed(1)],
+    ['ms-rain-max-x', 'ms-rain-max-x-val', 'rainMaxX', v => v.toFixed(1)],
     ['ms-shape-key-4', 'ms-shape-key-4-val', 'key4', v => v.toFixed(2)],
     ['ms-shape-key-5', 'ms-shape-key-5-val', 'key5', v => v.toFixed(2)],
     ['ms-shape-key-dry', 'ms-shape-key-dry-val', 'drySeason', v => v.toFixed(2)],
@@ -249,6 +299,15 @@ function syncSettingsUIFromState() {
     input.value = modelSettings[key];
     label.textContent = fmt(modelSettings[key]);
   });
+
+  const rainEnabledEl = document.getElementById('ms-rain-enabled');
+  const cloudsEnabledEl = document.getElementById('ms-clouds-enabled');
+  const rainEnabledLabel = document.getElementById('ms-rain-enabled-label');
+  const cloudsEnabledLabel = document.getElementById('ms-clouds-enabled-label');
+  if (rainEnabledEl) rainEnabledEl.checked = !!modelSettings.rainEnabled;
+  if (cloudsEnabledEl) cloudsEnabledEl.checked = !!modelSettings.cloudsEnabled;
+  if (rainEnabledLabel) rainEnabledLabel.textContent = modelSettings.rainEnabled ? 'On' : 'Off';
+  if (cloudsEnabledLabel) cloudsEnabledLabel.textContent = modelSettings.cloudsEnabled ? 'On' : 'Off';
 }
 
 function readSettingsFromUI() {
@@ -256,15 +315,19 @@ function readSettingsFromUI() {
     waveHeight: parseFloat(document.getElementById('ms-wave-height').value),
     waveFreq: parseFloat(document.getElementById('ms-wave-freq').value),
     waveSpeed: parseFloat(document.getElementById('ms-wave-speed').value),
+    rainEnabled: !!document.getElementById('ms-rain-enabled')?.checked,
     rainCount: parseInt(document.getElementById('ms-rain-count').value, 10),
     rainLength: parseFloat(document.getElementById('ms-rain-length').value),
     windX: parseFloat(document.getElementById('ms-wind-x').value),
     windZ: parseFloat(document.getElementById('ms-wind-z').value),
     rainTop: parseFloat(document.getElementById('ms-rain-top').value),
     rainBottom: parseFloat(document.getElementById('ms-rain-bottom').value),
+    rainMinX: parseFloat(document.getElementById('ms-rain-min-x').value),
+    rainMaxX: parseFloat(document.getElementById('ms-rain-max-x').value),
     key4: parseFloat(document.getElementById('ms-shape-key-4').value),
     key5: parseFloat(document.getElementById('ms-shape-key-5').value),
     drySeason: parseFloat(document.getElementById('ms-shape-key-dry').value),
+    cloudsEnabled: !!document.getElementById('ms-clouds-enabled')?.checked,
     cloudOpacity: parseFloat(document.getElementById('ms-cloud-opacity').value),
   };
 }
@@ -367,19 +430,27 @@ function bindModelSettingsControls() {
     sharedWaveUniforms.uWaveSpeed.value = v;
   });
   bind('ms-rain-count', 'ms-rain-count-val', 'rainCount', v => parseInt(v, 10), v => String(v), (v) => {
-    if (rainLines) {
-      rainLines.geometry.setDrawRange(0, v * 2);
-      rainLines.visible = v > 0;
-    }
+    modelSettings.rainCount = v;
+    applyRainVisibility();
   });
   bind('ms-rain-length', 'ms-rain-length-val', 'rainLength', parseFloat, v => v.toFixed(2));
   bind('ms-wind-x', 'ms-wind-x-val', 'windX', parseFloat, v => v.toFixed(1));
   bind('ms-wind-z', 'ms-wind-z-val', 'windZ', parseFloat, v => v.toFixed(1));
   bind('ms-rain-top', 'ms-rain-top-val', 'rainTop', parseFloat, v => v.toFixed(1), (v) => {
+    modelSettings.rainTop = v;
     rainBounds.maxY = v;
   });
   bind('ms-rain-bottom', 'ms-rain-bottom-val', 'rainBottom', parseFloat, v => v.toFixed(1), (v) => {
+    modelSettings.rainBottom = v;
     rainBounds.minY = v;
+  });
+  bind('ms-rain-min-x', 'ms-rain-min-x-val', 'rainMinX', parseFloat, v => v.toFixed(1), (v) => {
+    modelSettings.rainMinX = v;
+    rainBounds.minX = v;
+  });
+  bind('ms-rain-max-x', 'ms-rain-max-x-val', 'rainMaxX', parseFloat, v => v.toFixed(1), (v) => {
+    modelSettings.rainMaxX = v;
+    rainBounds.maxX = v;
   });
   bind('ms-shape-key-4', 'ms-shape-key-4-val', 'key4', parseFloat, v => v.toFixed(2), (v) => {
     setMorphByName('Key 4', v);
@@ -393,9 +464,29 @@ function bindModelSettingsControls() {
     setMorphByName('dry season', v);
   });
   bind('ms-cloud-opacity', 'ms-cloud-opacity-val', 'cloudOpacity', parseFloat, v => v.toFixed(2), (v) => {
-    cloudMaterialsCollection.forEach(mat => { mat.opacity = v; });
-    cloudMat.opacity = v;
+    modelSettings.cloudOpacity = v;
+    applyCloudVisibility();
   });
+
+  const rainEnabledEl = document.getElementById('ms-rain-enabled');
+  if (rainEnabledEl) {
+    rainEnabledEl.addEventListener('change', (e) => {
+      modelSettings.rainEnabled = !!e.target.checked;
+      const lbl = document.getElementById('ms-rain-enabled-label');
+      if (lbl) lbl.textContent = modelSettings.rainEnabled ? 'On' : 'Off';
+      applyRainVisibility();
+      applySettingsRainAtmosphere();
+    });
+  }
+  const cloudsEnabledEl = document.getElementById('ms-clouds-enabled');
+  if (cloudsEnabledEl) {
+    cloudsEnabledEl.addEventListener('change', (e) => {
+      modelSettings.cloudsEnabled = !!e.target.checked;
+      const lbl = document.getElementById('ms-clouds-enabled-label');
+      if (lbl) lbl.textContent = modelSettings.cloudsEnabled ? 'On' : 'Off';
+      applyCloudVisibility();
+    });
+  }
 }
 
 window.toggleModelSettings = function(force) {
@@ -425,11 +516,12 @@ window.toggleModelSettings = function(force) {
     outlinePass.selectedObjects = [];
     createRainEngine();
     applyModelSettings(modelSettings, { syncUI: true, syncPumps: true });
-    if (rainLines) rainLines.visible = modelSettings.rainCount > 0;
+    applySettingsRainAtmosphere(0.9);
     flyTo(22, 14, 22, 0, 0, 0);
     renderPresetSlots();
   } else {
-    if (rainLines) rainLines.visible = isRainy && modelSettings.rainCount > 0;
+    applyRainVisibility();
+    applySceneAtmosphere(!!isRainy, 0.9);
     setStage(settingsStageBefore || 1);
   }
 };
@@ -704,23 +796,20 @@ window.toggleWeather = function() {
     thumb.textContent = '🌧';
     label.textContent = 'Rainy Season';
     createRainEngine();
-    if (rainLines) {
-      rainLines.visible = modelSettings.rainCount > 0;
-      rainLines.geometry.setDrawRange(0, modelSettings.rainCount * 2);
-    }
+    applyRainVisibility();
     startThunder();
     modelSettings.cloudOpacity = Math.max(modelSettings.cloudOpacity, 0.6);
-    gsap.to(scene.background, { r:0.04, g:0.08, b:0.14, duration:1.8 });
-    if (scene.fog) { gsap.to(scene.fog.color, { r:0.04, g:0.08, b:0.14, duration:1.8 }); gsap.to(scene.fog, { density:0.022, duration:1.8 }); }
+    applyCloudVisibility();
+    applySceneAtmosphere(true, 1.8);
   } else {
     track.classList.remove('rainy');
     thumb.textContent = '☀';
     label.textContent = 'Dry Season';
     stopThunder();
-    if (rainLines) rainLines.visible = false;
+    applyRainVisibility();
     modelSettings.cloudOpacity = 0;
-    gsap.to(scene.background, { r:0.941, g:0.961, b:0.980, duration:1.8 });
-    if (scene.fog) { gsap.to(scene.fog.color, { r:0.867, g:0.910, b:0.949, duration:1.8 }); gsap.to(scene.fog, { density:0.008, duration:1.8 }); }
+    applyCloudVisibility();
+    applySceneAtmosphere(false, 1.8);
   }
 
   // Animate freshwater level over 3s (do not snap drySeason before the tween)
@@ -745,7 +834,8 @@ window.toggleWeather = function() {
     }
   });
 
-  gsap.to(cloudMat, { opacity: modelSettings.cloudOpacity, duration:1.6 });
+  const cloudOpacityTarget = modelSettings.cloudsEnabled ? modelSettings.cloudOpacity : 0;
+  gsap.to(cloudMat, { opacity: cloudOpacityTarget, duration:1.6 });
   syncSettingsUIFromState();
 };
 
@@ -1137,6 +1227,7 @@ function handleGLB(url, root) {
     scene.add(root);
   }
   else if (file.startsWith('clouds')) {
+    cloudsRoot = root;
     root.traverse(c => {
       if (!c.isMesh) return;
       c.material = cloudMat;
@@ -1146,6 +1237,7 @@ function handleGLB(url, root) {
       }
     });
     scene.add(root);
+    applyCloudVisibility();
   }
   else if (file.startsWith('props')) {
     propsModel = root;
@@ -1177,6 +1269,7 @@ let previewWarnTimer = null;
 function showPreviewExitWarning() {
   const el = document.getElementById('previewWarn');
   if (!el) return;
+  el.textContent = 'Please Exit Preview First';
   el.classList.add('show');
   if (previewWarnTimer) clearTimeout(previewWarnTimer);
   previewWarnTimer = setTimeout(() => el.classList.remove('show'), 2600);

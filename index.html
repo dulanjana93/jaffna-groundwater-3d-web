@@ -152,6 +152,14 @@
 
     <div class="ms-group">
       <h4>Rain Dynamics &amp; Wind</h4>
+      <div class="ms-row ms-toggle-row">
+        <label>Rain</label>
+        <label class="ms-switch">
+          <input type="checkbox" id="ms-rain-enabled" checked>
+          <span class="ms-switch-ui"></span>
+          <span class="ms-switch-text" id="ms-rain-enabled-label">On</span>
+        </label>
+      </div>
       <div class="ms-row">
         <label>Rain Amount:</label>
         <input type="range" id="ms-rain-count" min="0" max="1500" step="10" value="600">
@@ -172,20 +180,51 @@
         <input type="range" id="ms-wind-z" min="-5.0" max="5.0" step="0.1" value="0.0">
         <span id="ms-wind-z-val">0.0</span>
       </div>
+    </div>
+
+    <div class="ms-group">
+      <h4>Rain Bounding Box</h4>
       <div class="ms-row">
-        <label>Rain Top:</label>
-        <input type="range" id="ms-rain-top" min="1.0" max="12.0" step="0.2" value="3.2">
-        <span id="ms-rain-top-val">3.2</span>
+        <label>Min X:</label>
+        <input type="range" id="ms-rain-min-x" min="-20" max="20" step="0.5" value="-8">
+        <span id="ms-rain-min-x-val">-8.0</span>
       </div>
       <div class="ms-row">
-        <label>Rain Bottom:</label>
+        <label>Max X:</label>
+        <input type="range" id="ms-rain-max-x" min="-20" max="20" step="0.5" value="8">
+        <span id="ms-rain-max-x-val">8.0</span>
+      </div>
+      <div class="ms-row">
+        <label>Min Y (Bottom):</label>
         <input type="range" id="ms-rain-bottom" min="-2.0" max="5.0" step="0.1" value="-1.0">
         <span id="ms-rain-bottom-val">-1.0</span>
+      </div>
+      <div class="ms-row">
+        <label>Max Y (Top):</label>
+        <input type="range" id="ms-rain-top" min="1.0" max="12.0" step="0.2" value="3.2">
+        <span id="ms-rain-top-val">3.2</span>
       </div>
     </div>
 
     <div class="ms-group">
-      <h4>Shape Key &amp; Cloud Modifiers</h4>
+      <h4>Clouds (clouds-compressed.glb)</h4>
+      <div class="ms-row ms-toggle-row">
+        <label>Clouds</label>
+        <label class="ms-switch">
+          <input type="checkbox" id="ms-clouds-enabled" checked>
+          <span class="ms-switch-ui"></span>
+          <span class="ms-switch-text" id="ms-clouds-enabled-label">On</span>
+        </label>
+      </div>
+      <div class="ms-row">
+        <label>Cloud Opacity:</label>
+        <input type="range" id="ms-cloud-opacity" min="0" max="1" step="0.01" value="0">
+        <span id="ms-cloud-opacity-val">0.00</span>
+      </div>
+    </div>
+
+    <div class="ms-group">
+      <h4>Shape Key Modifiers</h4>
       <div class="ms-row">
         <label>Key 4:</label>
         <input type="range" id="ms-shape-key-4" min="0" max="1" step="0.01" value="0">
@@ -200,11 +239,6 @@
         <label>Dry Season:</label>
         <input type="range" id="ms-shape-key-dry" min="0" max="1" step="0.01" value="1">
         <span id="ms-shape-key-dry-val">1.00</span>
-      </div>
-      <div class="ms-row">
-        <label>Cloud Opacity:</label>
-        <input type="range" id="ms-cloud-opacity" min="0" max="1" step="0.01" value="0">
-        <span id="ms-cloud-opacity-val">0.00</span>
       </div>
     </div>
   </div>
@@ -407,7 +441,7 @@
 
   <!-- Exit isolate button -->
   <button id="btnExit">← Exit Preview</button>
-  <div id="previewWarn" role="alert" aria-live="assertive">Please exit preview first</div>
+  <div id="previewWarn" role="alert" aria-live="assertive">Please Exit Preview First</div>
 
   <!-- Bottom control panel -->
   <div id="uiPanel">
