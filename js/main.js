@@ -1225,29 +1225,19 @@ function placePumpArrows() {
   placePumpArrowOnLabel(labelP1, arrowPump2Right, { parented: false });
 }
 
-/** Pump Station 1 = dialP2 / pumpData.p2 — show arrow only while increasing. */
+/** Pump Station 1 = dialP2 / pumpData.p2 — show arrow while value > 0 (up or down). */
 function syncPump1ArrowVisibility(nextVal) {
-  const prev = lastPumpStation1Val;
-  if (nextVal > prev + 0.0005) {
-    pump1ArrowsRising = true;
-  } else if (nextVal < prev - 0.0005 || nextVal <= 0) {
-    pump1ArrowsRising = false;
-  }
   lastPumpStation1Val = nextVal;
+  pump1ArrowsRising = nextVal > 0.0005;
 
   const show = currentStage === 3 && !isSettingsMode && pump1ArrowsRising && pump1ArrowFramesReady;
   if (arrowPump1Left) arrowPump1Left.visible = show;
 }
 
-/** Pump Station 2 = dialP1 / pumpData.p1 — show arrow only while increasing. */
+/** Pump Station 2 = dialP1 / pumpData.p1 — show arrow while value > 0 (up or down). */
 function syncPump2ArrowVisibility(nextVal) {
-  const prev = lastPumpStation2Val;
-  if (nextVal > prev + 0.0005) {
-    pump2ArrowsRising = true;
-  } else if (nextVal < prev - 0.0005 || nextVal <= 0) {
-    pump2ArrowsRising = false;
-  }
   lastPumpStation2Val = nextVal;
+  pump2ArrowsRising = nextVal > 0.0005;
 
   const show = currentStage === 3 && !isSettingsMode && pump2ArrowsRising && pump2ArrowFramesReady;
   if (arrowPump2Right) arrowPump2Right.visible = !!show;
