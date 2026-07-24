@@ -921,10 +921,18 @@ function fadeRoot(root, toVisible, duration = 0.85) {
 }
 
 function syncBlockModeUI(mode) {
-  const chkPollution = document.getElementById('chkPollution');
-  const chkRecharge = document.getElementById('chkRecharge');
-  if (chkPollution) chkPollution.checked = mode === 'pollution';
-  if (chkRecharge) chkRecharge.checked = mode === 'recharge';
+  const btnPollution = document.getElementById('btnPollution');
+  const btnRecharge = document.getElementById('btnRecharge');
+  if (btnPollution) {
+    const on = mode === 'pollution';
+    btnPollution.classList.toggle('active', on);
+    btnPollution.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  if (btnRecharge) {
+    const on = mode === 'recharge';
+    btnRecharge.classList.toggle('active', on);
+    btnRecharge.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
 }
 
 function setBlockVariantMode(blockId, mode, { animate = true } = {}) {
@@ -974,33 +982,47 @@ function resetAllBlockVariants({ animate = false } = {}) {
 }
 
 function showBlockModeUI(show) {
-  const modeCard = document.getElementById('blockModeCard');
+  const modeBar = document.getElementById('csBlockMode');
   const infoCard = document.getElementById('blockInfoCard');
   const rp = document.getElementById('rp-s3');
-  if (modeCard) modeCard.style.display = show ? 'block' : 'none';
+  const cs3 = document.getElementById('cs3');
+  const uiPanel = document.getElementById('uiPanel');
+  const contextBar = document.getElementById('contextBar');
+
+  if (modeBar) {
+    if (show) {
+      modeBar.className = 'ctrl-group block-mode-bar';
+    } else {
+      modeBar.className = 'hidden ctrl-group block-mode-bar';
+    }
+  }
+
   if (show) {
     if (infoCard) infoCard.style.display = 'none';
     if (rp) rp.classList.add('hidden');
+    if (cs3) cs3.className = 'hidden';
+    if (uiPanel) uiPanel.style.opacity = '1';
+    if (contextBar) contextBar.style.display = 'none';
   } else {
     if (rp && currentStage === 4) rp.classList.remove('hidden');
+    if (cs3 && currentStage === 4 && !isIsolated) cs3.className = 'ctrl-group';
+    if (contextBar) contextBar.style.display = '';
   }
 }
 
 function bindBlockModeControls() {
-  const chkPollution = document.getElementById('chkPollution');
-  const chkRecharge = document.getElementById('chkRecharge');
-  if (chkPollution) {
-    chkPollution.addEventListener('change', () => {
+  const btnPollution = document.getElementById('btnPollution');
+  const btnRecharge = document.getElementById('btnRecharge');
+  if (btnPollution) {
+    btnPollution.addEventListener('click', () => {
       if (!isolatedVariantBlockId) return;
-      if (chkPollution.checked) setBlockVariantMode(isolatedVariantBlockId, 'pollution');
-      else setBlockVariantMode(isolatedVariantBlockId, 'recharge');
+      setBlockVariantMode(isolatedVariantBlockId, 'pollution');
     });
   }
-  if (chkRecharge) {
-    chkRecharge.addEventListener('change', () => {
+  if (btnRecharge) {
+    btnRecharge.addEventListener('click', () => {
       if (!isolatedVariantBlockId) return;
-      if (chkRecharge.checked) setBlockVariantMode(isolatedVariantBlockId, 'recharge');
-      else setBlockVariantMode(isolatedVariantBlockId, 'pollution');
+      setBlockVariantMode(isolatedVariantBlockId, 'recharge');
     });
   }
 }
@@ -1653,10 +1675,10 @@ function isolate(obj,idx){
   document.getElementById('biName').textContent=meta.name;
   document.getElementById('biDesc').textContent=meta.desc;
   document.getElementById('biTags').innerHTML=meta.tags.map(t=>`<span class="bi-tag">${t}</span>`).join('');
-  // Variant blocks use Pollution/Recharge card; others use structure info card
+  // Variant blocks use Pollution/Recharge bottom buttons; others use structure info card
   document.getElementById('blockInfoCard').style.display = pair ? 'none' : 'block';
   document.getElementById('btnExit').style.display='block';
-  document.getElementById('uiPanel').style.opacity='0.35';
+  document.getElementById('uiPanel').style.opacity = pair ? '1' : '0.35';
   document.getElementById('contextBar').textContent='Inspecting Structure  ·  Click Exit Preview to Return';
 }
 
