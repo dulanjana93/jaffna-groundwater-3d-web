@@ -8,6 +8,12 @@ import { OutlinePass }    from 'three/addons/postprocessing/OutlinePass.js';
 // ── STATE ──────────────────────────────────────────────────────────────
 let scene, renderer, camera, controls, composer, outlinePass;
 let oceanParts = [], cloudMeshes = [], interactiveBlocks = [];
+// Pollution/Recharge variant pairs: compressed = recharge, duplicate = pollution
+const blockVariants = {
+  1: { root: null, duplicate: null, mode: 'recharge' },
+  2: { root: null, duplicate: null, mode: 'recharge' },
+};
+let isolatedVariantBlockId = null; // 1 | 2 | null
 let oceanBottomRoot = null;
 let oceanTopRoot = null;
 let propsModel; // <--- Add this here
@@ -528,6 +534,7 @@ window.toggleModelSettings = function(force) {
 
 loadPresetsFromStorage();
 bindModelSettingsControls();
+bindBlockModeControls();
 renderPresetSlots();
 if (activePresetSlot >= 0 && presetSlots[activePresetSlot]) {
   modelSettings = { ...DEFAULT_MODEL_SETTINGS, ...presetSlots[activePresetSlot].settings };
@@ -865,6 +872,139 @@ function fadeOceanRoot(root, toVisible) {
   });
 }
 
+function prepareRootForFade(root) {
+  if (!root) return;
+  root.traverse(c => {
+    if (!c.isMesh || !c.material) return;
+    const mats = Array.isArray(c.material) ? c.material : [c.material];
+    mats.forEach(mat => {
+      if (mat._fadePrepared) return;
+      mat._fadePrepared = true;
+      mat._origTransparent = mat.transparent;
+      mat._origOpacity = mat.opacity !== undefined ? mat.opacity : 1;
+    });
+  });
+}
+
+function fadeRoot(root, toVisible, duration = 0.85) {
+  if (!root) return;
+  prepareRootForFade(root);
+  if (toVisible) root.visible = true;
+  root.traverse(c => {
+    if (!c.isMesh || !c.material) return;
+    const mats = Array.isArray(c.material) ? c.material : [c.material];
+    mats.forEach(mat => {
+      gsap.killTweensOf(mat);
+      const targetOpacity = mat._origOpacity !== undefined ? mat._origOpacity : 1;
+      if (toVisible) {
+        c.visible = true;
+        mat.transparent = true;
+        if (mat.opacity === undefined || mat.opacity < 0.01) mat.opacity = 0;
+        gsap.to(mat, {
+          opacity: targetOpacity,
+          duration,
+          onComplete: () => {
+            mat.transparent = mat._origTransparent || false;
+            mat.opacity = targetOpacity;
+          }
+        });
+      } else {
+        mat.transparent = true;
+        gsap.to(mat, {
+          opacity: 0,
+          duration,
+          onComplete: () => { c.visible = false; }
+        });
+      }
+    });
+  });
+}
+
+function syncBlockModeUI(mode) {
+  const chkPollution = document.getElementById('chkPollution');
+  const chkRecharge = document.getElementById('chkRecharge');
+  if (chkPollution) chkPollution.checked = mode === 'pollution';
+  if (chkRecharge) chkRecharge.checked = mode === 'recharge';
+}
+
+function setBlockVariantMode(blockId, mode, { animate = true } = {}) {
+  const pair = blockVariants[blockId];
+  if (!pair || !pair.root || !pair.duplicate) return;
+  if (mode !== 'pollution' && mode !== 'recharge') return;
+  pair.mode = mode;
+  if (isolatedVariantBlockId === blockId) syncBlockModeUI(mode);
+
+  const showPollution = mode === 'pollution';
+  if (animate) {
+    fadeRoot(pair.root, !showPollution);
+    fadeRoot(pair.duplicate, showPollution);
+  } else {
+    prepareRootForFade(pair.root);
+    prepareRootForFade(pair.duplicate);
+    pair.root.visible = !showPollution;
+    pair.duplicate.visible = showPollution;
+    [pair.root, pair.duplicate].forEach((root, i) => {
+      const show = i === 0 ? !showPollution : showPollution;
+      root.traverse(c => {
+        if (!c.isMesh || !c.material) return;
+        const mats = Array.isArray(c.material) ? c.material : [c.material];
+        mats.forEach(mat => {
+          gsap.killTweensOf(mat);
+          const targetOpacity = mat._origOpacity !== undefined ? mat._origOpacity : 1;
+          mat.opacity = show ? targetOpacity : 0;
+          mat.transparent = show ? (mat._origTransparent || false) : true;
+          c.visible = show;
+        });
+      });
+    });
+  }
+
+  if (isIsolated && isolatedVariantBlockId === blockId) {
+    outlinePass.selectedObjects = [showPollution ? pair.duplicate : pair.root];
+  }
+}
+
+function resetAllBlockVariants({ animate = false } = {}) {
+  Object.keys(blockVariants).forEach(id => {
+    const pair = blockVariants[id];
+    if (!pair.root || !pair.duplicate) return;
+    setBlockVariantMode(Number(id), 'recharge', { animate });
+    pair.duplicate.visible = false;
+  });
+}
+
+function showBlockModeUI(show) {
+  const modeCard = document.getElementById('blockModeCard');
+  const infoCard = document.getElementById('blockInfoCard');
+  const rp = document.getElementById('rp-s3');
+  if (modeCard) modeCard.style.display = show ? 'block' : 'none';
+  if (show) {
+    if (infoCard) infoCard.style.display = 'none';
+    if (rp) rp.classList.add('hidden');
+  } else {
+    if (rp && currentStage === 4) rp.classList.remove('hidden');
+  }
+}
+
+function bindBlockModeControls() {
+  const chkPollution = document.getElementById('chkPollution');
+  const chkRecharge = document.getElementById('chkRecharge');
+  if (chkPollution) {
+    chkPollution.addEventListener('change', () => {
+      if (!isolatedVariantBlockId) return;
+      if (chkPollution.checked) setBlockVariantMode(isolatedVariantBlockId, 'pollution');
+      else setBlockVariantMode(isolatedVariantBlockId, 'recharge');
+    });
+  }
+  if (chkRecharge) {
+    chkRecharge.addEventListener('change', () => {
+      if (!isolatedVariantBlockId) return;
+      if (chkRecharge.checked) setBlockVariantMode(isolatedVariantBlockId, 'recharge');
+      else setBlockVariantMode(isolatedVariantBlockId, 'pollution');
+    });
+  }
+}
+
 window.toggleOcean = function() {
   isOceanVisible = !isOceanVisible;
   const track = document.getElementById('oceanTrack');
@@ -1177,8 +1317,10 @@ function loadAssets() {
   const FILES = [
     { url:'assets/models/gnd-compressed.glb',            label:'Ground terrain',         pct:14 },
     { url:'assets/models/base-with-holes-compressed.glb', label:'Subsurface base',        pct:27 },
-    { url:'assets/models/block-1-compressed.glb',         label:'Infrastructure block 1', pct:40 },
-    { url:'assets/models/block-2-compressed.glb',         label:'Infrastructure block 2', pct:52 },
+    { url:'assets/models/block-1-compressed.glb',         label:'Infrastructure block 1', pct:32 },
+    { url:'assets/models/block-1-duplicate.glb',          label:'Block 1 pollution variant', pct:40 },
+    { url:'assets/models/block-2-compressed.glb',         label:'Infrastructure block 2', pct:48 },
+    { url:'assets/models/block-2-duplicate.glb',          label:'Block 2 pollution variant', pct:56 },
     { url:'assets/models/block-3-compressed.glb',         label:'Infrastructure block 3', pct:64 },
     { url:'assets/models/salt.glb',                       label:'Saltwater layer',        pct:75 },
     { url:'assets/models/fresh.glb',                      label:'Freshwater layer',       pct:86 },
@@ -1199,7 +1341,32 @@ function handleGLB(url, root) {
   const file = url.split('/').pop();
   if      (file.startsWith('ground') || file.startsWith('gnd'))     { baseGround=root; scene.add(root); }
   else if (file.startsWith('base-with') || file.startsWith('base_with'))  { baseWithHoles=root; root.visible=false; scene.add(root); }
-  else if (file.startsWith('block-') || file.startsWith('block_'))     { root.visible=false; root.userData.isInteractable=true; interactiveBlocks.push(root); scene.add(root); }
+  else if (/^block-[12]-duplicate/.test(file) || /^block_[12]_duplicate/.test(file)) {
+    const idMatch = file.match(/block[-_](\d)[-_]duplicate/);
+    const blockId = idMatch ? Number(idMatch[1]) : null;
+    if (!blockId || !blockVariants[blockId]) return;
+    blockVariants[blockId].duplicate = root;
+    root.visible = false;
+    root.userData.isBlockVariant = true;
+    root.userData.blockPairId = blockId;
+    prepareRootForFade(root);
+    scene.add(root);
+  }
+  else if (file.startsWith('block-') || file.startsWith('block_')) {
+    root.visible = false;
+    root.userData.isInteractable = true;
+    if (/^block-1-compressed/.test(file) || /^block_1_compressed/.test(file)) {
+      blockVariants[1].root = root;
+      root.userData.blockPairId = 1;
+      prepareRootForFade(root);
+    } else if (/^block-2-compressed/.test(file) || /^block_2_compressed/.test(file)) {
+      blockVariants[2].root = root;
+      root.userData.blockPairId = 2;
+      prepareRootForFade(root);
+    }
+    interactiveBlocks.push(root);
+    scene.add(root);
+  }
   else if (file.startsWith('salt'))  {
     oceanTopRoot = root;
     root.traverse(c => {
@@ -1351,6 +1518,13 @@ function setStage(s) {
   if (baseWithHoles)  baseWithHoles.visible = (s === 4);
   if (propsModel)     propsModel.visible    = true;
   interactiveBlocks.forEach(b => b.visible = (s === 4));
+  resetAllBlockVariants({ animate: false });
+  if (s !== 4) {
+    Object.values(blockVariants).forEach(pair => {
+      if (pair.root) pair.root.visible = false;
+      if (pair.duplicate) pair.duplicate.visible = false;
+    });
+  }
 
   // 6. Update Post-Processing (Outline for Infrastructure)
   outlinePass.selectedObjects = (s === 4) ? interactiveBlocks : [];
@@ -1456,12 +1630,30 @@ function refreshPumpUI(){
 // ── ISOLATION ────────────────────────────────────────────────────────
 function isolate(obj,idx){
   isIsolated=true;
+  isolatedVariantBlockId = (obj && obj.userData && obj.userData.blockPairId) || null;
+  const pair = isolatedVariantBlockId ? blockVariants[isolatedVariantBlockId] : null;
   outlinePass.selectedObjects=[obj];
   scene.children.forEach(c=>{
     if(c.isLight) return;
+    // Keep both variants available while inspecting a pollution/recharge block
+    if (pair && (c === pair.root || c === pair.duplicate)) {
+      if(c.userData._v===undefined) c.userData._v = c.visible;
+      return;
+    }
     if(c!==obj){if(c.userData._v===undefined)c.userData._v=c.visible; c.visible=false;}
   });
-  const box=new THREE.Box3().setFromObject(obj);
+
+  if (pair) {
+    setBlockVariantMode(isolatedVariantBlockId, 'recharge', { animate: false });
+    showBlockModeUI(true);
+  } else {
+    showBlockModeUI(false);
+  }
+
+  const focusObj = (pair && pair.mode === 'pollution' && pair.duplicate)
+    ? pair.duplicate
+    : obj;
+  const box=new THREE.Box3().setFromObject(focusObj);
   const center=box.getCenter(new THREE.Vector3());
   const size=box.getSize(new THREE.Vector3());
   const max=Math.max(size.x,size.y,size.z);
@@ -1471,8 +1663,8 @@ function isolate(obj,idx){
   document.getElementById('biName').textContent=meta.name;
   document.getElementById('biDesc').textContent=meta.desc;
   document.getElementById('biTags').innerHTML=meta.tags.map(t=>`<span class="bi-tag">${t}</span>`).join('');
-  // Show info card in left panel (inside lp-s3, below Ground Stratigraphy)
-  document.getElementById('blockInfoCard').style.display='block';
+  // Variant blocks use Pollution/Recharge card; others use structure info card
+  document.getElementById('blockInfoCard').style.display = pair ? 'none' : 'block';
   document.getElementById('btnExit').style.display='block';
   document.getElementById('uiPanel').style.opacity='0.35';
   document.getElementById('contextBar').textContent='Inspecting Structure  ·  Click Exit Preview to Return';
@@ -1480,8 +1672,18 @@ function isolate(obj,idx){
 
 function deIsolate(){
   isIsolated=false;
+  if (isolatedVariantBlockId) {
+    setBlockVariantMode(isolatedVariantBlockId, 'recharge', { animate: false });
+    const pair = blockVariants[isolatedVariantBlockId];
+    if (pair && pair.duplicate) pair.duplicate.visible = false;
+    showBlockModeUI(false);
+  }
+  isolatedVariantBlockId = null;
   outlinePass.selectedObjects=interactiveBlocks;
   scene.children.forEach(c=>{if(c.userData._v!==undefined){c.visible=c.userData._v;delete c.userData._v;}});
+  Object.values(blockVariants).forEach(pair => {
+    if (pair.duplicate) pair.duplicate.visible = false;
+  });
   document.getElementById('blockInfoCard').style.display='none';
   document.getElementById('btnExit').style.display='none';
   document.getElementById('uiPanel').style.opacity='1';

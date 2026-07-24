@@ -506,6 +506,15 @@ body.settings-mode .nav-tabs{display:none!important}
   padding:.17rem .48rem;border-radius:50px;border:1px solid rgba(90,180,232,.3);
   color:#7ec8e8;background:rgba(46,127,193,.15);margin:.1rem .08rem 0 0;
 }
+#blockModeCard{display:none;pointer-events:all}
+.block-mode-options{display:flex;flex-direction:column;gap:.55rem}
+.block-mode-option{
+  display:flex;align-items:center;gap:.55rem;cursor:pointer;
+  font-size:.72rem;color:#d8eaf6;user-select:none;
+}
+.block-mode-option input{
+  width:15px;height:15px;accent-color:#2e7fc1;cursor:pointer;flex-shrink:0;
+}
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    BOTTOM CONTROL PANEL â€” dark navy for contrast on white scene
