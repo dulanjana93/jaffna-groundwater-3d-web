@@ -12,8 +12,46 @@ let oceanParts = [], cloudMeshes = [], interactiveBlocks = [];
 const blockVariants = {
   1: { root: null, duplicate: null, mode: 'recharge' },
   2: { root: null, duplicate: null, mode: 'recharge' },
+  3: { root: null, duplicate: null, mode: 'recharge' },
 };
-let isolatedVariantBlockId = null; // 1 | 2 | null
+let isolatedVariantBlockId = null; // 1 | 2 | 3 | null
+let blockDetailActive = false;
+let blockDetailVisible = false;
+
+/**
+ * Per-cube detail card content (Infrastructure isolate).
+ * Replace `video` and `text` for each cube when you have unique media/copy.
+ * `title` is the card heading.
+ */
+const BLOCK_DETAIL_CONTENT = {
+  1: {
+    title: 'Cube 1 — Groundwater Flow',
+    video: 'assets/videos/flow-of-groundwater.mp4', // TODO: replace with cube-1 video
+    text:
+      'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor ' +
+      'incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud ' +
+      'exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute ' +
+      'irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.'
+  },
+  2: {
+    title: 'Cube 2 — Groundwater Flow',
+    video: 'assets/videos/flow-of-groundwater.mp4', // TODO: replace with cube-2 video
+    text:
+      'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor ' +
+      'incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud ' +
+      'exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute ' +
+      'irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.'
+  },
+  3: {
+    title: 'Cube 3 — Groundwater Flow',
+    video: 'assets/videos/flow-of-groundwater.mp4', // TODO: replace with cube-3 video
+    text:
+      'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor ' +
+      'incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud ' +
+      'exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute ' +
+      'irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.'
+  }
+};
 let oceanBottomRoot = null;
 let oceanTopRoot = null;
 let propsModel; // <--- Add this here
@@ -58,7 +96,8 @@ const DEFAULT_MODEL_SETTINGS = {
   key5: 0,
   drySeason: 1,
   cloudsEnabled: true,
-  cloudOpacity: 0
+  cloudOpacity: 0,
+  lightingPreset: 'sunny' // 'sunny' | 'rainy'
 };
 let modelSettings = { ...DEFAULT_MODEL_SETTINGS };
 let activePresetSlot = -1;
@@ -74,6 +113,28 @@ const sharedWaveUniforms = {
 let morphTargetsCollection = [];
 let cloudMaterialsCollection = [cloudMat];
 let rainLines = null;
+let ambientLight = null;
+let hemiLight = null;
+let sunLight = null;
+let fillLight = null;
+
+/** Editable lighting looks for Model Settings presets */
+const LIGHTING_PRESETS = {
+  sunny: {
+    ambient: { color: 0xffffff, intensity: 3.0 },
+    hemi: { sky: 0xfaf5ee, ground: 0xc8d8e8, intensity: 1.6 },
+    sun: { color: 0xfff8f0, intensity: 3.5, position: [20, 40, 20] },
+    fill: { color: 0xc8d8f0, intensity: 1.2, position: [-20, 10, -20] },
+    exposure: 1.1
+  },
+  rainy: {
+    ambient: { color: 0xb0c4d8, intensity: 1.35 },
+    hemi: { sky: 0x6a849c, ground: 0x3a4a58, intensity: 0.85 },
+    sun: { color: 0xa8b8c8, intensity: 1.15, position: [12, 28, 18] },
+    fill: { color: 0x7a90a8, intensity: 0.65, position: [-16, 8, -14] },
+    exposure: 0.82
+  }
+};
 const maxRaindrops = 1500;
 let individualSpeeds = new Float32Array(maxRaindrops);
 const rainBaseSpeedMultiplier = 6.0;
@@ -240,6 +301,108 @@ function applyCloudVisibility() {
   cloudMat.opacity = opacity;
 }
 
+function applyLightingPreset(presetName, duration = 1.0) {
+  // Accept legacy 'weather' key from older saved presets
+  const key = presetName === 'rainy' ? 'rainy' : 'sunny';
+  const preset = LIGHTING_PRESETS[key];
+  if (!preset || !renderer) return;
+  modelSettings.lightingPreset = key;
+
+  const setColor = (threeColor, hex) => {
+    const c = new THREE.Color(hex);
+    threeColor.setRGB(c.r, c.g, c.b);
+  };
+
+  if (duration <= 0) {
+    if (ambientLight) {
+      ambientLight.intensity = preset.ambient.intensity;
+      setColor(ambientLight.color, preset.ambient.color);
+    }
+    if (hemiLight) {
+      hemiLight.intensity = preset.hemi.intensity;
+      setColor(hemiLight.color, preset.hemi.sky);
+      setColor(hemiLight.groundColor, preset.hemi.ground);
+    }
+    if (sunLight) {
+      sunLight.intensity = preset.sun.intensity;
+      setColor(sunLight.color, preset.sun.color);
+      sunLight.position.set(...preset.sun.position);
+    }
+    if (fillLight) {
+      fillLight.intensity = preset.fill.intensity;
+      setColor(fillLight.color, preset.fill.color);
+      fillLight.position.set(...preset.fill.position);
+    }
+    renderer.toneMappingExposure = preset.exposure;
+    syncLightingPresetUI();
+    return;
+  }
+
+  const toRgb = (hex) => {
+    const c = new THREE.Color(hex);
+    return { r: c.r, g: c.g, b: c.b };
+  };
+
+  if (ambientLight) {
+    gsap.killTweensOf(ambientLight);
+    gsap.killTweensOf(ambientLight.color);
+    gsap.to(ambientLight, { intensity: preset.ambient.intensity, duration });
+    gsap.to(ambientLight.color, { ...toRgb(preset.ambient.color), duration });
+  }
+  if (hemiLight) {
+    gsap.killTweensOf(hemiLight);
+    gsap.killTweensOf(hemiLight.color);
+    gsap.killTweensOf(hemiLight.groundColor);
+    gsap.to(hemiLight, { intensity: preset.hemi.intensity, duration });
+    gsap.to(hemiLight.color, { ...toRgb(preset.hemi.sky), duration });
+    gsap.to(hemiLight.groundColor, { ...toRgb(preset.hemi.ground), duration });
+  }
+  if (sunLight) {
+    gsap.killTweensOf(sunLight);
+    gsap.killTweensOf(sunLight.color);
+    gsap.killTweensOf(sunLight.position);
+    gsap.to(sunLight, { intensity: preset.sun.intensity, duration });
+    gsap.to(sunLight.color, { ...toRgb(preset.sun.color), duration });
+    gsap.to(sunLight.position, {
+      x: preset.sun.position[0],
+      y: preset.sun.position[1],
+      z: preset.sun.position[2],
+      duration
+    });
+  }
+  if (fillLight) {
+    gsap.killTweensOf(fillLight);
+    gsap.killTweensOf(fillLight.color);
+    gsap.killTweensOf(fillLight.position);
+    gsap.to(fillLight, { intensity: preset.fill.intensity, duration });
+    gsap.to(fillLight.color, { ...toRgb(preset.fill.color), duration });
+    gsap.to(fillLight.position, {
+      x: preset.fill.position[0],
+      y: preset.fill.position[1],
+      z: preset.fill.position[2],
+      duration
+    });
+  }
+
+  gsap.killTweensOf(renderer);
+  gsap.to(renderer, { toneMappingExposure: preset.exposure, duration });
+  syncLightingPresetUI();
+}
+
+function syncLightingPresetUI() {
+  const sunnyBtn = document.getElementById('ms-light-sunny');
+  const rainyBtn = document.getElementById('ms-light-rainy');
+  const active = modelSettings.lightingPreset === 'rainy' ? 'rainy' : 'sunny';
+  if (sunnyBtn) {
+    sunnyBtn.classList.toggle('active', active === 'sunny');
+    sunnyBtn.setAttribute('aria-pressed', active === 'sunny' ? 'true' : 'false');
+  }
+  if (rainyBtn) {
+    rainyBtn.classList.toggle('active', active === 'rainy');
+    rainyBtn.setAttribute('aria-pressed', active === 'rainy' ? 'true' : 'false');
+  }
+}
+
 function applyRainBoundsFromSettings() {
   rainBounds.minX = modelSettings.rainMinX;
   rainBounds.maxX = modelSettings.rainMaxX;
@@ -257,6 +420,7 @@ function applyModelSettings(settings, { syncUI = true, syncPumps = true } = {}) 
   applyRainBoundsFromSettings();
   applyRainVisibility();
   applyCloudVisibility();
+  applyLightingPreset(modelSettings.lightingPreset || 'sunny', 0);
   if (isSettingsMode) applySettingsRainAtmosphere(0.6);
 
   setMorphByName('Key 4', modelSettings.key4);
@@ -314,6 +478,7 @@ function syncSettingsUIFromState() {
   if (cloudsEnabledEl) cloudsEnabledEl.checked = !!modelSettings.cloudsEnabled;
   if (rainEnabledLabel) rainEnabledLabel.textContent = modelSettings.rainEnabled ? 'On' : 'Off';
   if (cloudsEnabledLabel) cloudsEnabledLabel.textContent = modelSettings.cloudsEnabled ? 'On' : 'Off';
+  syncLightingPresetUI();
 }
 
 function readSettingsFromUI() {
@@ -335,6 +500,7 @@ function readSettingsFromUI() {
     drySeason: parseFloat(document.getElementById('ms-shape-key-dry').value),
     cloudsEnabled: !!document.getElementById('ms-clouds-enabled')?.checked,
     cloudOpacity: parseFloat(document.getElementById('ms-cloud-opacity').value),
+    lightingPreset: modelSettings.lightingPreset === 'rainy' ? 'rainy' : 'sunny',
   };
 }
 
@@ -482,6 +648,7 @@ function bindModelSettingsControls() {
       if (lbl) lbl.textContent = modelSettings.rainEnabled ? 'On' : 'Off';
       applyRainVisibility();
       applySettingsRainAtmosphere();
+      applyLightingPreset(modelSettings.rainEnabled ? 'rainy' : 'sunny', 1.0);
     });
   }
   const cloudsEnabledEl = document.getElementById('ms-clouds-enabled');
@@ -492,6 +659,15 @@ function bindModelSettingsControls() {
       if (lbl) lbl.textContent = modelSettings.cloudsEnabled ? 'On' : 'Off';
       applyCloudVisibility();
     });
+  }
+
+  const sunnyBtn = document.getElementById('ms-light-sunny');
+  const rainyBtn = document.getElementById('ms-light-rainy');
+  if (sunnyBtn) {
+    sunnyBtn.addEventListener('click', () => applyLightingPreset('sunny', 1.0));
+  }
+  if (rainyBtn) {
+    rainyBtn.addEventListener('click', () => applyLightingPreset('rainy', 1.0));
   }
 }
 
@@ -808,6 +984,7 @@ window.toggleWeather = function() {
     modelSettings.cloudOpacity = Math.max(modelSettings.cloudOpacity, 0.6);
     applyCloudVisibility();
     applySceneAtmosphere(true, 1.8);
+    applyLightingPreset('rainy', 1.8);
   } else {
     track.classList.remove('rainy');
     thumb.textContent = '☀';
@@ -817,6 +994,7 @@ window.toggleWeather = function() {
     modelSettings.cloudOpacity = 0;
     applyCloudVisibility();
     applySceneAtmosphere(false, 1.8);
+    applyLightingPreset('sunny', 1.8);
   }
 
   // Animate freshwater level over 3s (do not snap drySeason before the tween)
@@ -983,28 +1161,21 @@ function resetAllBlockVariants({ animate = false } = {}) {
 
 function showBlockModeUI(show) {
   const modeBar = document.getElementById('csBlockMode');
-  const infoCard = document.getElementById('blockInfoCard');
-  const rp = document.getElementById('rp-s3');
   const cs3 = document.getElementById('cs3');
   const uiPanel = document.getElementById('uiPanel');
   const contextBar = document.getElementById('contextBar');
 
   if (modeBar) {
-    if (show) {
-      modeBar.className = 'ctrl-group block-mode-bar';
-    } else {
-      modeBar.className = 'hidden ctrl-group block-mode-bar';
-    }
+    modeBar.className = show
+      ? 'ctrl-group block-mode-bar'
+      : 'hidden ctrl-group block-mode-bar';
   }
 
   if (show) {
-    if (infoCard) infoCard.style.display = 'none';
-    if (rp) rp.classList.add('hidden');
     if (cs3) cs3.className = 'hidden';
     if (uiPanel) uiPanel.style.opacity = '1';
     if (contextBar) contextBar.style.display = 'none';
   } else {
-    if (rp && currentStage === 4) rp.classList.remove('hidden');
     if (cs3 && currentStage === 4 && !isIsolated) cs3.className = 'ctrl-group';
     if (contextBar) contextBar.style.display = '';
   }
@@ -1024,6 +1195,105 @@ function bindBlockModeControls() {
       if (!isolatedVariantBlockId) return;
       setBlockVariantMode(isolatedVariantBlockId, 'recharge');
     });
+  }
+
+  const btnHide = document.getElementById('btnHideBlockDetailCard');
+  const btnShow = document.getElementById('btnShowBlockDetailCard');
+  if (btnHide) {
+    btnHide.addEventListener('click', () => {
+      if (!blockDetailActive) return;
+      setBlockDetailCardVisible(false);
+    });
+  }
+  if (btnShow) {
+    btnShow.addEventListener('click', () => {
+      if (!blockDetailActive) return;
+      setBlockDetailCardVisible(true);
+    });
+  }
+}
+
+function applyBlockDetailContent(blockId) {
+  const content = BLOCK_DETAIL_CONTENT[blockId];
+  if (!content) return;
+
+  const titleEl = document.getElementById('blockDetailTitle');
+  const copyEl = document.getElementById('blockDetailCopy');
+  const video = document.getElementById('blockDetailVideo');
+
+  if (titleEl) titleEl.textContent = content.title || '';
+  if (copyEl) copyEl.textContent = content.text || '';
+
+  if (video) {
+    const nextSrc = content.video || '';
+    const currentSrc = video.getAttribute('src') || '';
+    // Only reload when the source changes (avoids flicker if same file)
+    if (currentSrc !== nextSrc) {
+      video.pause();
+      video.setAttribute('src', nextSrc);
+      video.load();
+    }
+  }
+}
+
+function playBlockDetailVideo() {
+  const video = document.getElementById('blockDetailVideo');
+  if (!video || !video.getAttribute('src')) return;
+  video.currentTime = 0;
+  // Prefer full playback with sound; fall back to muted autoplay if blocked
+  const tryPlay = (muted) => {
+    video.muted = muted;
+    const playPromise = video.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      return playPromise.catch(() => {
+        if (!muted) return tryPlay(true);
+      });
+    }
+  };
+  tryPlay(false);
+}
+
+function pauseBlockDetailVideo() {
+  const video = document.getElementById('blockDetailVideo');
+  if (!video) return;
+  video.pause();
+}
+
+function setBlockDetailCardVisible(show) {
+  blockDetailVisible = !!show;
+  const card = document.getElementById('blockDetailCard');
+  const btnShow = document.getElementById('btnShowBlockDetailCard');
+  const rightPanel = document.getElementById('rightPanel');
+  const rp = document.getElementById('rp-s3');
+
+  if (card) {
+    card.style.display = show ? 'block' : 'none';
+    card.setAttribute('aria-hidden', show ? 'false' : 'true');
+  }
+  if (btnShow) {
+    const showBtn = blockDetailActive && !show;
+    btnShow.style.display = showBtn ? 'block' : 'none';
+    btnShow.setAttribute('aria-hidden', showBtn ? 'false' : 'true');
+  }
+  if (rightPanel) rightPanel.classList.toggle('wide-detail', !!show && blockDetailActive);
+  if (rp && blockDetailActive) rp.classList.remove('hidden');
+
+  if (show && blockDetailActive) playBlockDetailVideo();
+  else pauseBlockDetailVideo();
+}
+
+function showBlockDetailUI(show, blockId = null) {
+  blockDetailActive = !!show;
+  const rp = document.getElementById('rp-s3');
+  if (show) {
+    if (blockId) applyBlockDetailContent(blockId);
+    if (rp) rp.classList.remove('hidden');
+    setBlockDetailCardVisible(true);
+  } else {
+    setBlockDetailCardVisible(false);
+    if (rp) rp.classList.add('hidden');
+    const rightPanel = document.getElementById('rightPanel');
+    if (rightPanel) rightPanel.classList.remove('wide-detail');
   }
 }
 
@@ -1056,25 +1326,6 @@ window.toggleOcean = function() {
     if (alert)  alert.style.display = 'none';
   }
 };
-
-// ── BLOCK META ─────────────────────────────────────────────────────────
-const BLOCK_META = [
-  {
-    name:'Pump Infrastructure A',
-    desc:'Primary extraction facility serving the Valikamam aquifer. Houses high-lift motorised pumps replacing traditional pulley systems. Critical northern distribution node.',
-    tags:['Valikamam Zone','High-Lift Pump','Primary']
-  },
-  {
-    name:'Distribution Hub B',
-    desc:'Central monitoring hub linking the Thenmaradchchi aquifer to the municipal network. Monitors salinity TDS and water table in real time.',
-    tags:['Thenmaradchchi','Monitoring','Distribution']
-  },
-  {
-    name:'Treatment Station C',
-    desc:'Secondary treatment addressing elevated nitrate from agrochemicals in the Vadamaradchchi aquifer. Includes multi-stage sand filtration.',
-    tags:['Vadamaradchchi','Nitrate Filter','Treatment']
-  }
-];
 
 // ── EXPOSE GLOBALS ─────────────────────────────────────────────────────
 window.enterApp = enterApp;
@@ -1125,12 +1376,17 @@ function init() {
   renderer.toneMappingExposure = 1.1;
   document.getElementById('cvs-wrap').appendChild(renderer.domElement);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 3));
-  scene.add(new THREE.HemisphereLight(0xfaf5ee, 0xc8d8e8, 1.6));
-  const sun = new THREE.DirectionalLight(0xfff8f0, 3.5);
-  sun.position.set(20, 40, 20); scene.add(sun);
-  const fill = new THREE.DirectionalLight(0xc8d8f0, 1.2);
-  fill.position.set(-20, 10, -20); scene.add(fill);
+  ambientLight = new THREE.AmbientLight(0xffffff, 3);
+  scene.add(ambientLight);
+  hemiLight = new THREE.HemisphereLight(0xfaf5ee, 0xc8d8e8, 1.6);
+  scene.add(hemiLight);
+  sunLight = new THREE.DirectionalLight(0xfff8f0, 3.5);
+  sunLight.position.set(20, 40, 20);
+  scene.add(sunLight);
+  fillLight = new THREE.DirectionalLight(0xc8d8f0, 1.2);
+  fillLight.position.set(-20, 10, -20);
+  scene.add(fillLight);
+  applyLightingPreset(modelSettings.lightingPreset || 'sunny', 0);
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -1332,10 +1588,11 @@ function loadAssets() {
     { url:'assets/models/block-1-compressed.glb',         label:'Infrastructure block 1', pct:32 },
     { url:'assets/models/block-1-duplicate.glb',          label:'Block 1 pollution variant', pct:40 },
     { url:'assets/models/block-2-compressed.glb',         label:'Infrastructure block 2', pct:48 },
-    { url:'assets/models/block-2-duplicate.glb',          label:'Block 2 pollution variant', pct:56 },
-    { url:'assets/models/block-3-compressed.glb',         label:'Infrastructure block 3', pct:64 },
-    { url:'assets/models/salt.glb',                       label:'Saltwater layer',        pct:75 },
-    { url:'assets/models/fresh.glb',                      label:'Freshwater layer',       pct:86 },
+    { url:'assets/models/block-2-duplicate.glb',          label:'Block 2 pollution variant', pct:54 },
+    { url:'assets/models/block-3-compressed.glb',         label:'Infrastructure block 3', pct:62 },
+    { url:'assets/models/block-3-duplicate.glb',          label:'Block 3 pollution variant', pct:68 },
+    { url:'assets/models/salt.glb',                       label:'Saltwater layer',        pct:78 },
+    { url:'assets/models/fresh.glb',                      label:'Freshwater layer',       pct:88 },
     { url:'assets/models/clouds-compressed.glb',          label:'Atmosphere layer',       pct:95 },
     { url:'assets/models/props.glb',                      label:'objects',                pct:100 },
   ];
@@ -1353,7 +1610,7 @@ function handleGLB(url, root) {
   const file = url.split('/').pop();
   if      (file.startsWith('ground') || file.startsWith('gnd'))     { baseGround=root; scene.add(root); }
   else if (file.startsWith('base-with') || file.startsWith('base_with'))  { baseWithHoles=root; root.visible=false; scene.add(root); }
-  else if (/^block-[12]-duplicate/.test(file) || /^block_[12]_duplicate/.test(file)) {
+  else if (/^block-[123]-duplicate/.test(file) || /^block_[123]_duplicate/.test(file)) {
     const idMatch = file.match(/block[-_](\d)[-_]duplicate/);
     const blockId = idMatch ? Number(idMatch[1]) : null;
     if (!blockId || !blockVariants[blockId]) return;
@@ -1374,6 +1631,10 @@ function handleGLB(url, root) {
     } else if (/^block-2-compressed/.test(file) || /^block_2_compressed/.test(file)) {
       blockVariants[2].root = root;
       root.userData.blockPairId = 2;
+      prepareRootForFade(root);
+    } else if (/^block-3-compressed/.test(file) || /^block_3_compressed/.test(file)) {
+      blockVariants[3].root = root;
+      root.userData.blockPairId = 3;
       prepareRootForFade(root);
     }
     interactiveBlocks.push(root);
@@ -1556,6 +1817,28 @@ function flyTo(x,y,z,tx,ty,tz){
   gsap.to(controls.target,{x:tx,y:ty,z:tz,duration:1.6,onUpdate:()=>controls.update()});
 }
 
+/** Frame an object slightly left of screen center (room for right-side content, clear of left stratigraphy card). */
+function flyToIsolateObject(focusObj) {
+  const box = new THREE.Box3().setFromObject(focusObj);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const max = Math.max(size.x, size.y, size.z, 0.5);
+
+  const camPos = new THREE.Vector3(
+    center.x + max * 2.2,
+    center.y + max * 1.4,
+    center.z + max * 2.2
+  );
+
+  // Shift look-at to camera-right so the object sits left-of-center on screen
+  const viewDir = new THREE.Vector3().subVectors(center, camPos).normalize();
+  const right = new THREE.Vector3().crossVectors(viewDir, new THREE.Vector3(0, 1, 0)).normalize();
+  // Stronger left bias: leave more room on the right for content
+  const target = center.clone().addScaledVector(right, max * 0.95);
+
+  flyTo(camPos.x, camPos.y, camPos.z, target.x, target.y, target.z);
+}
+
 // ── INTERACTIONS ──────────────────────────────────────────────────────
 function setupInteractions(){
   const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
@@ -1658,27 +1941,20 @@ function isolate(obj,idx){
   if (pair) {
     setBlockVariantMode(isolatedVariantBlockId, 'recharge', { animate: false });
     showBlockModeUI(true);
+    showBlockDetailUI(true, isolatedVariantBlockId);
   } else {
     showBlockModeUI(false);
+    showBlockDetailUI(false);
+    const uiPanel = document.getElementById('uiPanel');
+    if (uiPanel) uiPanel.style.opacity = '0.35';
   }
 
   const focusObj = (pair && pair.mode === 'pollution' && pair.duplicate)
     ? pair.duplicate
     : obj;
-  const box=new THREE.Box3().setFromObject(focusObj);
-  const center=box.getCenter(new THREE.Vector3());
-  const size=box.getSize(new THREE.Vector3());
-  const max=Math.max(size.x,size.y,size.z);
-  flyTo(center.x+max*2.2,center.y+max*1.4,center.z+max*2.2,center.x,center.y,center.z);
+  flyToIsolateObject(focusObj);
 
-  const meta=BLOCK_META[idx]||BLOCK_META[0];
-  document.getElementById('biName').textContent=meta.name;
-  document.getElementById('biDesc').textContent=meta.desc;
-  document.getElementById('biTags').innerHTML=meta.tags.map(t=>`<span class="bi-tag">${t}</span>`).join('');
-  // Variant blocks use Pollution/Recharge bottom buttons; others use structure info card
-  document.getElementById('blockInfoCard').style.display = pair ? 'none' : 'block';
   document.getElementById('btnExit').style.display='block';
-  document.getElementById('uiPanel').style.opacity = pair ? '1' : '0.35';
   document.getElementById('contextBar').textContent='Inspecting Structure  ·  Click Exit Preview to Return';
 }
 
@@ -1688,15 +1964,15 @@ function deIsolate(){
     setBlockVariantMode(isolatedVariantBlockId, 'recharge', { animate: false });
     const pair = blockVariants[isolatedVariantBlockId];
     if (pair && pair.duplicate) pair.duplicate.visible = false;
-    showBlockModeUI(false);
   }
+  showBlockModeUI(false);
+  showBlockDetailUI(false);
   isolatedVariantBlockId = null;
   outlinePass.selectedObjects=interactiveBlocks;
   scene.children.forEach(c=>{if(c.userData._v!==undefined){c.visible=c.userData._v;delete c.userData._v;}});
   Object.values(blockVariants).forEach(pair => {
     if (pair.duplicate) pair.duplicate.visible = false;
   });
-  document.getElementById('blockInfoCard').style.display='none';
   document.getElementById('btnExit').style.display='none';
   document.getElementById('uiPanel').style.opacity='1';
   document.getElementById('contextBar').textContent='Orbit · Scroll to Zoom · Drag to Rotate';

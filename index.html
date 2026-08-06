@@ -103,11 +103,7 @@
   <!-- Top bar -->
   <div id="topbar">
     <div class="logo" onclick="goHome()" role="button" tabindex="0" title="Home" aria-label="Return to home screen" onkeydown="if(event.key==='Enter'||event.key===' ')goHome()">
-      <div class="logo-mark">JW</div>
-      <div>
-        <div class="logo-name">Jaffna <span>Aquifer</span></div>
-        <div class="logo-sub">Northern Sri Lanka · Hydrogeology</div>
-      </div>
+      <div class="logo-name">Jaffna <span>Aquifer</span></div>
     </div>
   <div class="nav-tabs">
     <div class="tab active" onclick="setStage(1)">Ocean View</div>
@@ -228,6 +224,18 @@
     </div>
 
     <div class="ms-group">
+      <h4>Lighting Presets</h4>
+      <div class="ms-lighting-presets">
+        <button type="button" class="ms-light-btn active" id="ms-light-sunny" data-preset="sunny" aria-pressed="true">
+          Sunny
+        </button>
+        <button type="button" class="ms-light-btn" id="ms-light-rainy" data-preset="rainy" aria-pressed="false">
+          Rainy
+        </button>
+      </div>
+    </div>
+
+    <div class="ms-group">
       <h4>Shape Key Modifiers</h4>
       <div class="ms-row">
         <label>Key 4:</label>
@@ -311,15 +319,7 @@
     <!-- Stage placeholders (kept for panel toggle logic) -->
     <div id="lp-s1" class="hidden"></div>
     <div id="lp-s2" class="hidden"></div>
-    <div id="lp-s3" class="hidden">
-      <!-- Block info — shows below Ground Stratigraphy on infrastructure click -->
-      <div id="blockInfoCard">
-        <div class="bi-eyebrow">Structure Inspection</div>
-        <div class="bi-name" id="biName">—</div>
-        <div class="bi-desc" id="biDesc"></div>
-        <div id="biTags"></div>
-      </div>
-    </div>
+    <div id="lp-s3" class="hidden"></div>
     <div id="lp-s4" class="hidden"></div>
   </div>
 
@@ -404,47 +404,33 @@
         </div>
       </div>
     </div>
-    <!-- Stage 3 -->
+    <!-- Stage 3 (Infrastructure) — per-cube detail card (content from BLOCK_DETAIL_CONTENT in main.js) -->
     <div id="rp-s3" class="hidden">
-      <div class="card">
-        <div class="card-title">Water Quality Threats</div>
-        <div class="gauge-bar-wrap">
-          <div class="gauge-bar-label"><span>Nitrate (Valikamam)</span><em>Elevated</em></div>
-          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-danger" style="width:82%"></div></div>
+      <div id="blockDetailCard" class="card block-detail-card" style="display:none" aria-hidden="true">
+        <div class="block-detail-head">
+          <div class="card-title block-detail-title" id="blockDetailTitle">Cube Details</div>
+          <button type="button" id="btnHideBlockDetailCard" class="block-detail-toggle" title="Hide details">Hide</button>
         </div>
-        <div class="gauge-bar-wrap">
-          <div class="gauge-bar-label"><span>Faecal Contamination</span><em>High</em></div>
-          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-danger" style="width:74%"></div></div>
+        <div class="block-detail-video-wrap">
+          <video
+            id="blockDetailVideo"
+            controls
+            autoplay
+            muted
+            playsinline
+            preload="auto"
+          ></video>
         </div>
-        <div class="gauge-bar-wrap">
-          <div class="gauge-bar-label"><span>Salinity TDS</span><em>Moderate</em></div>
-          <div class="gauge-bar-track"><div class="gauge-bar-fill fill-warn" style="width:55%"></div></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-title">Pollution Sources</div>
-        <div class="leg-item"><div class="swatch" style="background:#d97706"></div>Agrochemical Runoff</div>
-        <div class="leg-item"><div class="swatch" style="background:#dc2626"></div>Industrial Waste Oil</div>
-        <div class="leg-item"><div class="swatch" style="background:#7c3aed"></div>Sanitation Failure</div>
-        <div class="leg-item"><div class="swatch" style="background:rgba(26,127,193,.7)"></div>Saline Intrusion</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Research Findings</div>
-        <div class="quote-block">
-          "The carrying capacity of the limestone aquifer shall play a major role —
-          caverns may weaken in strength and fractures cause water to flow to sea."
-          <br/><br/>— Vijakanth et al., IJSER 2017
-        </div>
+        <p class="card-body block-detail-copy" id="blockDetailCopy"></p>
       </div>
     </div>
     <!-- Stage 4 -->
-    <div id="rp-s4" class="hidden">
-      </div>
-    </div>
+    <div id="rp-s4" class="hidden"></div>
   </div>
 
   <!-- Exit isolate button -->
   <button id="btnExit">← Exit Preview</button>
+  <button type="button" id="btnShowBlockDetailCard" class="block-detail-show-btn" style="display:none" aria-hidden="true">Show Details</button>
   <div id="previewWarn" role="alert" aria-live="assertive">Please Exit Preview First</div>
 
   <!-- Bottom control panel -->
