@@ -92,6 +92,8 @@ const DEFAULT_MODEL_SETTINGS = {
   rainBottom: -1.0,
   rainMinX: -8,
   rainMaxX: 8,
+  rainMinZ: -8,
+  rainMaxZ: 8,
   key4: 0,
   key5: 0,
   drySeason: 1,
@@ -143,7 +145,8 @@ const rainBounds = {
   maxX: DEFAULT_MODEL_SETTINGS.rainMaxX,
   minY: DEFAULT_MODEL_SETTINGS.rainBottom,
   maxY: DEFAULT_MODEL_SETTINGS.rainTop,
-  minZ: -8, maxZ: 8
+  minZ: DEFAULT_MODEL_SETTINGS.rainMinZ,
+  maxZ: DEFAULT_MODEL_SETTINGS.rainMaxZ
 };
 
 // --- SHADER COMPILER ENGINE (same as sea.html) ---
@@ -408,6 +411,8 @@ function applyRainBoundsFromSettings() {
   rainBounds.maxX = modelSettings.rainMaxX;
   rainBounds.minY = modelSettings.rainBottom;
   rainBounds.maxY = modelSettings.rainTop;
+  rainBounds.minZ = modelSettings.rainMinZ;
+  rainBounds.maxZ = modelSettings.rainMaxZ;
 }
 
 function applyModelSettings(settings, { syncUI = true, syncPumps = true } = {}) {
@@ -457,6 +462,8 @@ function syncSettingsUIFromState() {
     ['ms-rain-bottom', 'ms-rain-bottom-val', 'rainBottom', v => v.toFixed(1)],
     ['ms-rain-min-x', 'ms-rain-min-x-val', 'rainMinX', v => v.toFixed(1)],
     ['ms-rain-max-x', 'ms-rain-max-x-val', 'rainMaxX', v => v.toFixed(1)],
+    ['ms-rain-min-z', 'ms-rain-min-z-val', 'rainMinZ', v => v.toFixed(1)],
+    ['ms-rain-max-z', 'ms-rain-max-z-val', 'rainMaxZ', v => v.toFixed(1)],
     ['ms-shape-key-4', 'ms-shape-key-4-val', 'key4', v => v.toFixed(2)],
     ['ms-shape-key-5', 'ms-shape-key-5-val', 'key5', v => v.toFixed(2)],
     ['ms-shape-key-dry', 'ms-shape-key-dry-val', 'drySeason', v => v.toFixed(2)],
@@ -495,6 +502,8 @@ function readSettingsFromUI() {
     rainBottom: parseFloat(document.getElementById('ms-rain-bottom').value),
     rainMinX: parseFloat(document.getElementById('ms-rain-min-x').value),
     rainMaxX: parseFloat(document.getElementById('ms-rain-max-x').value),
+    rainMinZ: parseFloat(document.getElementById('ms-rain-min-z').value),
+    rainMaxZ: parseFloat(document.getElementById('ms-rain-max-z').value),
     key4: parseFloat(document.getElementById('ms-shape-key-4').value),
     key5: parseFloat(document.getElementById('ms-shape-key-5').value),
     drySeason: parseFloat(document.getElementById('ms-shape-key-dry').value),
@@ -623,6 +632,14 @@ function bindModelSettingsControls() {
   bind('ms-rain-max-x', 'ms-rain-max-x-val', 'rainMaxX', parseFloat, v => v.toFixed(1), (v) => {
     modelSettings.rainMaxX = v;
     rainBounds.maxX = v;
+  });
+  bind('ms-rain-min-z', 'ms-rain-min-z-val', 'rainMinZ', parseFloat, v => v.toFixed(1), (v) => {
+    modelSettings.rainMinZ = v;
+    rainBounds.minZ = v;
+  });
+  bind('ms-rain-max-z', 'ms-rain-max-z-val', 'rainMaxZ', parseFloat, v => v.toFixed(1), (v) => {
+    modelSettings.rainMaxZ = v;
+    rainBounds.maxZ = v;
   });
   bind('ms-shape-key-4', 'ms-shape-key-4-val', 'key4', parseFloat, v => v.toFixed(2), (v) => {
     setMorphByName('Key 4', v);
@@ -1825,9 +1842,9 @@ function flyToIsolateObject(focusObj) {
   const max = Math.max(size.x, size.y, size.z, 0.5);
 
   const camPos = new THREE.Vector3(
-    center.x + max * 2.2,
-    center.y + max * 1.4,
-    center.z + max * 2.2
+    center.x + max * 1.75,
+    center.y + max * 1.1,
+    center.z + max * 1.75
   );
 
   // Shift look-at to camera-right so the object sits left-of-center on screen
