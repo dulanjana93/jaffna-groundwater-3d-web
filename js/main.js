@@ -149,49 +149,6 @@ const rainBounds = {
   maxZ: DEFAULT_MODEL_SETTINGS.rainMaxZ
 };
 
-// --- SHADER COMPILER ENGINE (same as sea.html) ---
-function applyUnifiedWaveShader(material, targetColorHex) {
-  material.color.setHex(targetColorHex);
-  material.roughness = 0.15;
-  material.metalness = 0.1;
-  material.transparent = true;
-  material.opacity = 0.85;
-
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = sharedWaveUniforms.uTime;
-    shader.uniforms.uWaveHeight = sharedWaveUniforms.uWaveHeight;
-    shader.uniforms.uWaveFrequency = sharedWaveUniforms.uWaveFrequency;
-    shader.uniforms.uWaveSpeed = sharedWaveUniforms.uWaveSpeed;
-
-    shader.vertexShader = `
-      attribute float _surface;
-      attribute float surface;
-      uniform float uTime;
-      uniform float uWaveHeight;
-      uniform float uWaveFrequency;
-      uniform float uWaveSpeed;
-    \n` + shader.vertexShader;
-
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <begin_vertex>',
-      `
-      #include <begin_vertex>
-      
-      float mask = max(_surface, surface);
-      
-      if(mask == 0.0) {
-          mask = step(0.9, normal.y);
-      }
-
-      if (mask > 0.0) {
-          float wave = sin(position.x * uWaveFrequency + uTime * uWaveSpeed) * cos(position.z * uWaveFrequency * 0.9 + uTime * uWaveSpeed * 1.1);
-          transformed.y += wave * uWaveHeight * mask;
-      }
-      `
-    );
-  };
-}
-
 function registerMorphTargets(root) {
   root.traverse(c => {
     if (c.isMesh && c.morphTargetDictionary) morphTargetsCollection.push(c);
@@ -1660,13 +1617,10 @@ function handleGLB(url, root) {
   else if (file.startsWith('salt'))  {
     oceanTopRoot = root;
     root.traverse(c => {
-      if (c.isMesh) {
-        applyUnifiedWaveShader(c.material, 0x1a7fc1);
-        if (c.morphTargetDictionary) {
-          oceanParts.push(c);
-          morphTargetsCollection.push(c);
-          setMorph(c, 'dry season', modelSettings.drySeason);
-        }
+      if (c.isMesh && c.morphTargetDictionary) {
+        oceanParts.push(c);
+        morphTargetsCollection.push(c);
+        setMorph(c, 'dry season', modelSettings.drySeason);
       }
     });
     scene.add(root);
@@ -1674,9 +1628,7 @@ function handleGLB(url, root) {
   else if (file.startsWith('fresh')) {
     oceanBottomRoot = root;
     root.traverse(c => {
-      if (!c.isMesh) return;
-      applyUnifiedWaveShader(c.material, 0x2e9fd4);
-      if (c.morphTargetDictionary) {
+      if (c.isMesh && c.morphTargetDictionary) {
         oceanParts.push(c);
         morphTargetsCollection.push(c);
       }
@@ -1850,8 +1802,8 @@ function flyToIsolateObject(focusObj) {
   // Shift look-at to camera-right so the object sits left-of-center on screen
   const viewDir = new THREE.Vector3().subVectors(center, camPos).normalize();
   const right = new THREE.Vector3().crossVectors(viewDir, new THREE.Vector3(0, 1, 0)).normalize();
-  // Stronger left bias: leave more room on the right for content
-  const target = center.clone().addScaledVector(right, max * 0.95);
+  // Mild left bias: keep some room for the right detail card without sitting too far left
+  const target = center.clone().addScaledVector(right, max * 0.45);
 
   flyTo(camPos.x, camPos.y, camPos.z, target.x, target.y, target.z);
 }
