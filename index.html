@@ -242,6 +242,84 @@
           Rainy
         </button>
       </div>
+      <div class="ms-light-edit-note">Editing <span id="ms-light-editing">Sunny</span> values</div>
+
+      <div class="ms-row">
+        <label>Exposure:</label>
+        <input type="range" id="ms-light-exposure" min="0.2" max="2.5" step="0.05" value="1.1">
+        <span id="ms-light-exposure-val">1.10</span>
+      </div>
+      <div class="ms-row">
+        <label>Ambient Intensity:</label>
+        <input type="range" id="ms-light-ambient-i" min="0" max="6" step="0.05" value="3">
+        <span id="ms-light-ambient-i-val">3.00</span>
+      </div>
+      <div class="ms-row ms-color-row">
+        <label>Ambient Color:</label>
+        <input type="color" id="ms-light-ambient-c" value="#ffffff">
+      </div>
+      <div class="ms-row">
+        <label>Hemi Intensity:</label>
+        <input type="range" id="ms-light-hemi-i" min="0" max="4" step="0.05" value="1.6">
+        <span id="ms-light-hemi-i-val">1.60</span>
+      </div>
+      <div class="ms-row ms-color-row">
+        <label>Hemi Sky:</label>
+        <input type="color" id="ms-light-hemi-sky" value="#faf5ee">
+      </div>
+      <div class="ms-row ms-color-row">
+        <label>Hemi Ground:</label>
+        <input type="color" id="ms-light-hemi-ground" value="#c8d8e8">
+      </div>
+      <div class="ms-row">
+        <label>Sun Intensity:</label>
+        <input type="range" id="ms-light-sun-i" min="0" max="8" step="0.05" value="3.5">
+        <span id="ms-light-sun-i-val">3.50</span>
+      </div>
+      <div class="ms-row ms-color-row">
+        <label>Sun Color:</label>
+        <input type="color" id="ms-light-sun-c" value="#fff8f0">
+      </div>
+      <div class="ms-row">
+        <label>Sun Pos X:</label>
+        <input type="range" id="ms-light-sun-x" min="-60" max="60" step="1" value="20">
+        <span id="ms-light-sun-x-val">20</span>
+      </div>
+      <div class="ms-row">
+        <label>Sun Pos Y:</label>
+        <input type="range" id="ms-light-sun-y" min="0" max="80" step="1" value="40">
+        <span id="ms-light-sun-y-val">40</span>
+      </div>
+      <div class="ms-row">
+        <label>Sun Pos Z:</label>
+        <input type="range" id="ms-light-sun-z" min="-60" max="60" step="1" value="20">
+        <span id="ms-light-sun-z-val">20</span>
+      </div>
+      <div class="ms-row">
+        <label>Fill Intensity:</label>
+        <input type="range" id="ms-light-fill-i" min="0" max="4" step="0.05" value="1.2">
+        <span id="ms-light-fill-i-val">1.20</span>
+      </div>
+      <div class="ms-row ms-color-row">
+        <label>Fill Color:</label>
+        <input type="color" id="ms-light-fill-c" value="#c8d8f0">
+      </div>
+      <div class="ms-row">
+        <label>Fill Pos X:</label>
+        <input type="range" id="ms-light-fill-x" min="-60" max="60" step="1" value="-20">
+        <span id="ms-light-fill-x-val">-20</span>
+      </div>
+      <div class="ms-row">
+        <label>Fill Pos Y:</label>
+        <input type="range" id="ms-light-fill-y" min="0" max="80" step="1" value="10">
+        <span id="ms-light-fill-y-val">10</span>
+      </div>
+      <div class="ms-row">
+        <label>Fill Pos Z:</label>
+        <input type="range" id="ms-light-fill-z" min="-60" max="60" step="1" value="-20">
+        <span id="ms-light-fill-z-val">-20</span>
+      </div>
+      <button type="button" id="ms-light-reset" class="ms-light-reset">Reset Active Preset</button>
     </div>
 
     <div class="ms-group">

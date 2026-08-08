@@ -120,8 +120,8 @@ let hemiLight = null;
 let sunLight = null;
 let fillLight = null;
 
-/** Editable lighting looks for Model Settings presets */
-const LIGHTING_PRESETS = {
+/** Default lighting looks — Reset Active Preset restores from these */
+const DEFAULT_LIGHTING_PRESETS = {
   sunny: {
     ambient: { color: 0xffffff, intensity: 3.0 },
     hemi: { sky: 0xfaf5ee, ground: 0xc8d8e8, intensity: 1.6 },
@@ -130,13 +130,21 @@ const LIGHTING_PRESETS = {
     exposure: 1.1
   },
   rainy: {
-    ambient: { color: 0xb0c4d8, intensity: 1.35 },
-    hemi: { sky: 0x6a849c, ground: 0x3a4a58, intensity: 0.85 },
-    sun: { color: 0xa8b8c8, intensity: 1.15, position: [12, 28, 18] },
-    fill: { color: 0x7a90a8, intensity: 0.65, position: [-16, 8, -14] },
-    exposure: 0.82
+    ambient: { color: 0x8aa0b8, intensity: 0.95 },
+    hemi: { sky: 0x4a6078, ground: 0x2a3540, intensity: 0.55 },
+    sun: { color: 0x90a4b8, intensity: 0.7, position: [10, 22, 14] },
+    fill: { color: 0x607888, intensity: 0.4, position: [-14, 6, -12] },
+    exposure: 0.7
   }
 };
+
+function cloneLightingPresets(src) {
+  return JSON.parse(JSON.stringify(src));
+}
+
+/** Live editable lighting presets (Sunny / Rainy) */
+let LIGHTING_PRESETS = cloneLightingPresets(DEFAULT_LIGHTING_PRESETS);
+const LIGHTING_STORAGE_KEY = 'jaffnaLightingPresets_v1';
 const maxRaindrops = 1500;
 let individualSpeeds = new Float32Array(maxRaindrops);
 const rainBaseSpeedMultiplier = 6.0;
@@ -148,6 +156,59 @@ const rainBounds = {
   minZ: DEFAULT_MODEL_SETTINGS.rainMinZ,
   maxZ: DEFAULT_MODEL_SETTINGS.rainMaxZ
 };
+
+// Wave motion only — keeps original salt/fresh GLB material look (no color/opacity override)
+function applyWaveShader(material) {
+  if (!material || material.userData._waveApplied) return;
+  material.userData._waveApplied = true;
+
+  const prevCompile = material.onBeforeCompile;
+  material.onBeforeCompile = (shader) => {
+    if (typeof prevCompile === 'function') prevCompile(shader);
+
+    shader.uniforms.uTime = sharedWaveUniforms.uTime;
+    shader.uniforms.uWaveHeight = sharedWaveUniforms.uWaveHeight;
+    shader.uniforms.uWaveFrequency = sharedWaveUniforms.uWaveFrequency;
+    shader.uniforms.uWaveSpeed = sharedWaveUniforms.uWaveSpeed;
+
+    shader.vertexShader = `
+      attribute float _surface;
+      attribute float surface;
+      uniform float uTime;
+      uniform float uWaveHeight;
+      uniform float uWaveFrequency;
+      uniform float uWaveSpeed;
+    \n` + shader.vertexShader;
+
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `
+      #include <begin_vertex>
+      
+      float mask = max(_surface, surface);
+      
+      if(mask == 0.0) {
+          mask = step(0.9, normal.y);
+      }
+
+      if (mask > 0.0) {
+          float wave = sin(position.x * uWaveFrequency + uTime * uWaveSpeed) * cos(position.z * uWaveFrequency * 0.9 + uTime * uWaveSpeed * 1.1);
+          transformed.y += wave * uWaveHeight * mask;
+      }
+      `
+    );
+  };
+  material.needsUpdate = true;
+}
+
+function applyWaveShaderToRoot(root) {
+  if (!root) return;
+  root.traverse(c => {
+    if (!c.isMesh || !c.material) return;
+    const mats = Array.isArray(c.material) ? c.material : [c.material];
+    mats.forEach(applyWaveShader);
+  });
+}
 
 function registerMorphTargets(root) {
   root.traverse(c => {
@@ -352,6 +413,7 @@ function applyLightingPreset(presetName, duration = 1.0) {
 function syncLightingPresetUI() {
   const sunnyBtn = document.getElementById('ms-light-sunny');
   const rainyBtn = document.getElementById('ms-light-rainy');
+  const editingLabel = document.getElementById('ms-light-editing');
   const active = modelSettings.lightingPreset === 'rainy' ? 'rainy' : 'sunny';
   if (sunnyBtn) {
     sunnyBtn.classList.toggle('active', active === 'sunny');
@@ -361,6 +423,94 @@ function syncLightingPresetUI() {
     rainyBtn.classList.toggle('active', active === 'rainy');
     rainyBtn.setAttribute('aria-pressed', active === 'rainy' ? 'true' : 'false');
   }
+  if (editingLabel) editingLabel.textContent = active === 'rainy' ? 'Rainy' : 'Sunny';
+  syncLightingEditorUI();
+}
+
+function hexToCss(hex) {
+  const n = (Number(hex) >>> 0) & 0xffffff;
+  return '#' + n.toString(16).padStart(6, '0');
+}
+
+function cssToHex(css) {
+  const raw = String(css || '#ffffff').replace('#', '');
+  return parseInt(raw, 16) || 0xffffff;
+}
+
+function setRangeUI(id, valId, value, fmt) {
+  const input = document.getElementById(id);
+  const label = document.getElementById(valId);
+  if (input) input.value = value;
+  if (label) label.textContent = fmt(value);
+}
+
+function syncLightingEditorUI() {
+  const key = modelSettings.lightingPreset === 'rainy' ? 'rainy' : 'sunny';
+  const p = LIGHTING_PRESETS[key];
+  if (!p) return;
+
+  setRangeUI('ms-light-exposure', 'ms-light-exposure-val', p.exposure, v => Number(v).toFixed(2));
+  setRangeUI('ms-light-ambient-i', 'ms-light-ambient-i-val', p.ambient.intensity, v => Number(v).toFixed(2));
+  setRangeUI('ms-light-hemi-i', 'ms-light-hemi-i-val', p.hemi.intensity, v => Number(v).toFixed(2));
+  setRangeUI('ms-light-sun-i', 'ms-light-sun-i-val', p.sun.intensity, v => Number(v).toFixed(2));
+  setRangeUI('ms-light-fill-i', 'ms-light-fill-i-val', p.fill.intensity, v => Number(v).toFixed(2));
+  setRangeUI('ms-light-sun-x', 'ms-light-sun-x-val', p.sun.position[0], v => String(Math.round(v)));
+  setRangeUI('ms-light-sun-y', 'ms-light-sun-y-val', p.sun.position[1], v => String(Math.round(v)));
+  setRangeUI('ms-light-sun-z', 'ms-light-sun-z-val', p.sun.position[2], v => String(Math.round(v)));
+  setRangeUI('ms-light-fill-x', 'ms-light-fill-x-val', p.fill.position[0], v => String(Math.round(v)));
+  setRangeUI('ms-light-fill-y', 'ms-light-fill-y-val', p.fill.position[1], v => String(Math.round(v)));
+  setRangeUI('ms-light-fill-z', 'ms-light-fill-z-val', p.fill.position[2], v => String(Math.round(v)));
+
+  const setColorInput = (id, hex) => {
+    const el = document.getElementById(id);
+    if (el) el.value = hexToCss(hex);
+  };
+  setColorInput('ms-light-ambient-c', p.ambient.color);
+  setColorInput('ms-light-hemi-sky', p.hemi.sky);
+  setColorInput('ms-light-hemi-ground', p.hemi.ground);
+  setColorInput('ms-light-sun-c', p.sun.color);
+  setColorInput('ms-light-fill-c', p.fill.color);
+}
+
+function saveLightingPresetsToStorage() {
+  try {
+    localStorage.setItem(LIGHTING_STORAGE_KEY, JSON.stringify(LIGHTING_PRESETS));
+  } catch (_) {}
+}
+
+function loadLightingPresetsFromStorage() {
+  try {
+    const raw = localStorage.getItem(LIGHTING_STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object') return;
+    ['sunny', 'rainy'].forEach(key => {
+      const def = DEFAULT_LIGHTING_PRESETS[key];
+      const cur = data[key] || {};
+      LIGHTING_PRESETS[key] = {
+        exposure: cur.exposure ?? def.exposure,
+        ambient: { ...def.ambient, ...(cur.ambient || {}) },
+        hemi: { ...def.hemi, ...(cur.hemi || {}) },
+        sun: {
+          ...def.sun,
+          ...(cur.sun || {}),
+          position: Array.isArray(cur.sun?.position) ? [...cur.sun.position] : [...def.sun.position]
+        },
+        fill: {
+          ...def.fill,
+          ...(cur.fill || {}),
+          position: Array.isArray(cur.fill?.position) ? [...cur.fill.position] : [...def.fill.position]
+        }
+      };
+    });
+  } catch (_) {}
+}
+
+function resetActiveLightingPreset() {
+  const key = modelSettings.lightingPreset === 'rainy' ? 'rainy' : 'sunny';
+  LIGHTING_PRESETS[key] = cloneLightingPresets(DEFAULT_LIGHTING_PRESETS)[key];
+  saveLightingPresetsToStorage();
+  applyLightingPreset(key, 0.6);
 }
 
 function applyRainBoundsFromSettings() {
@@ -372,7 +522,7 @@ function applyRainBoundsFromSettings() {
   rainBounds.maxZ = modelSettings.rainMaxZ;
 }
 
-function applyModelSettings(settings, { syncUI = true, syncPumps = true } = {}) {
+function applyModelSettings(settings, { syncUI = true, syncPumps = true, syncLighting = true } = {}) {
   modelSettings = { ...DEFAULT_MODEL_SETTINGS, ...settings };
 
   sharedWaveUniforms.uWaveHeight.value = modelSettings.waveHeight;
@@ -382,7 +532,7 @@ function applyModelSettings(settings, { syncUI = true, syncPumps = true } = {}) 
   applyRainBoundsFromSettings();
   applyRainVisibility();
   applyCloudVisibility();
-  applyLightingPreset(modelSettings.lightingPreset || 'sunny', 0);
+  if (syncLighting) applyLightingPreset(modelSettings.lightingPreset || 'sunny', 0);
   if (isSettingsMode) applySettingsRainAtmosphere(0.6);
 
   setMorphByName('Key 4', modelSettings.key4);
@@ -554,7 +704,7 @@ function bindModelSettingsControls() {
       label.textContent = fmt(val);
       modelSettings[key] = val;
       if (extra) extra(val);
-      else applyModelSettings(modelSettings, { syncUI: false });
+      else applyModelSettings(modelSettings, { syncUI: false, syncLighting: false });
     });
   };
 
@@ -643,6 +793,54 @@ function bindModelSettingsControls() {
   if (rainyBtn) {
     rainyBtn.addEventListener('click', () => applyLightingPreset('rainy', 1.0));
   }
+
+  const bindLightRange = (id, valId, write, fmt) => {
+    const input = document.getElementById(id);
+    const label = document.getElementById(valId);
+    if (!input) return;
+    input.addEventListener('input', (e) => {
+      const key = modelSettings.lightingPreset === 'rainy' ? 'rainy' : 'sunny';
+      const val = parseFloat(e.target.value);
+      if (label) label.textContent = fmt(val);
+      write(LIGHTING_PRESETS[key], val);
+      saveLightingPresetsToStorage();
+      applyLightingPreset(key, 0);
+    });
+  };
+
+  const bindLightColor = (id, write) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener('input', (e) => {
+      const key = modelSettings.lightingPreset === 'rainy' ? 'rainy' : 'sunny';
+      write(LIGHTING_PRESETS[key], cssToHex(e.target.value));
+      saveLightingPresetsToStorage();
+      applyLightingPreset(key, 0);
+    });
+  };
+
+  bindLightRange('ms-light-exposure', 'ms-light-exposure-val', (p, v) => { p.exposure = v; }, v => v.toFixed(2));
+  bindLightRange('ms-light-ambient-i', 'ms-light-ambient-i-val', (p, v) => { p.ambient.intensity = v; }, v => v.toFixed(2));
+  bindLightRange('ms-light-hemi-i', 'ms-light-hemi-i-val', (p, v) => { p.hemi.intensity = v; }, v => v.toFixed(2));
+  bindLightRange('ms-light-sun-i', 'ms-light-sun-i-val', (p, v) => { p.sun.intensity = v; }, v => v.toFixed(2));
+  bindLightRange('ms-light-fill-i', 'ms-light-fill-i-val', (p, v) => { p.fill.intensity = v; }, v => v.toFixed(2));
+  bindLightRange('ms-light-sun-x', 'ms-light-sun-x-val', (p, v) => { p.sun.position[0] = v; }, v => String(Math.round(v)));
+  bindLightRange('ms-light-sun-y', 'ms-light-sun-y-val', (p, v) => { p.sun.position[1] = v; }, v => String(Math.round(v)));
+  bindLightRange('ms-light-sun-z', 'ms-light-sun-z-val', (p, v) => { p.sun.position[2] = v; }, v => String(Math.round(v)));
+  bindLightRange('ms-light-fill-x', 'ms-light-fill-x-val', (p, v) => { p.fill.position[0] = v; }, v => String(Math.round(v)));
+  bindLightRange('ms-light-fill-y', 'ms-light-fill-y-val', (p, v) => { p.fill.position[1] = v; }, v => String(Math.round(v)));
+  bindLightRange('ms-light-fill-z', 'ms-light-fill-z-val', (p, v) => { p.fill.position[2] = v; }, v => String(Math.round(v)));
+
+  bindLightColor('ms-light-ambient-c', (p, hex) => { p.ambient.color = hex; });
+  bindLightColor('ms-light-hemi-sky', (p, hex) => { p.hemi.sky = hex; });
+  bindLightColor('ms-light-hemi-ground', (p, hex) => { p.hemi.ground = hex; });
+  bindLightColor('ms-light-sun-c', (p, hex) => { p.sun.color = hex; });
+  bindLightColor('ms-light-fill-c', (p, hex) => { p.fill.color = hex; });
+
+  const resetBtn = document.getElementById('ms-light-reset');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => resetActiveLightingPreset());
+  }
 }
 
 window.toggleModelSettings = function(force) {
@@ -682,6 +880,7 @@ window.toggleModelSettings = function(force) {
   }
 };
 
+loadLightingPresetsFromStorage();
 loadPresetsFromStorage();
 bindModelSettingsControls();
 bindBlockModeControls();
@@ -689,6 +888,7 @@ renderPresetSlots();
 if (activePresetSlot >= 0 && presetSlots[activePresetSlot]) {
   modelSettings = { ...DEFAULT_MODEL_SETTINGS, ...presetSlots[activePresetSlot].settings };
 }
+syncLightingEditorUI();
 
 // ── LIGHTNING / THUNDER (climate tab — 3D rain comes from cloud rainLines) ─
 let thunderTimeout = null;
@@ -1616,6 +1816,7 @@ function handleGLB(url, root) {
   }
   else if (file.startsWith('salt'))  {
     oceanTopRoot = root;
+    applyWaveShaderToRoot(root);
     root.traverse(c => {
       if (c.isMesh && c.morphTargetDictionary) {
         oceanParts.push(c);
@@ -1627,6 +1828,7 @@ function handleGLB(url, root) {
   }
   else if (file.startsWith('fresh')) {
     oceanBottomRoot = root;
+    applyWaveShaderToRoot(root);
     root.traverse(c => {
       if (c.isMesh && c.morphTargetDictionary) {
         oceanParts.push(c);
@@ -1778,7 +1980,7 @@ function setStage(s) {
   if (s === 4) flyTo(22, 14, 22, 0, 0, 0); // Infrastructure PositionflyTo(9.18, 4.04, 10.34, -1.76, -1.54, 2.79);
 
   // Keep model settings applied on every tab
-  applyModelSettings(modelSettings, { syncUI: false, syncPumps: false });
+  applyModelSettings(modelSettings, { syncUI: false, syncPumps: false, syncLighting: false });
   if (rainLines) rainLines.visible = isRainy && modelSettings.rainCount > 0;
 }
 function flyTo(x,y,z,tx,ty,tz){

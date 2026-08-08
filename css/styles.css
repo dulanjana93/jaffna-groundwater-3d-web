@@ -373,7 +373,7 @@ html,body{height:100%;background:var(--navy);color:var(--text-dk);font-family:'O
 .ms-switch input:checked + .ms-switch-ui{background:#4fc3f7}
 .ms-switch input:checked + .ms-switch-ui::after{transform:translateX(18px)}
 .ms-switch-text{font-size:11px;color:#fff;min-width:24px}
-.ms-lighting-presets{display:flex;gap:8px}
+.ms-lighting-presets{display:flex;gap:8px;margin-bottom:10px}
 .ms-light-btn{
   flex:1;min-height:40px;cursor:pointer;border-radius:8px;
   font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;
@@ -388,6 +388,20 @@ html,body{height:100%;background:var(--navy);color:var(--text-dk);font-family:'O
 .ms-light-btn#ms-light-rainy.active{
   background:rgba(70,110,150,.95);border-color:#90caf9;
 }
+.ms-light-edit-note{
+  font-size:10px;color:#7ec8e8;margin:0 0 10px;letter-spacing:.3px;
+}
+.ms-color-row input[type=color]{
+  width:100px;height:24px;padding:0;border:1px solid rgba(255,255,255,.25);
+  border-radius:4px;background:transparent;cursor:pointer;
+}
+.ms-light-reset{
+  width:100%;margin-top:8px;cursor:pointer;border-radius:7px;
+  border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);
+  color:#fff;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;
+  letter-spacing:.3px;padding:.45rem .6rem;
+}
+.ms-light-reset:hover{background:rgba(79,195,247,.22);border-color:#4fc3f7}
 .ms-presets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ms-preset{
   border:1px solid rgba(255,255,255,.18);border-radius:8px;
